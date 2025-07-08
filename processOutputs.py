@@ -1,0 +1,493 @@
+import os
+import numpy as np
+import h5py
+import matplotlib.pyplot as plt
+import imageio.v2 as imageio
+from tqdm import tqdm
+from astropy import units as u
+from simsopt.field.boozermagneticfield import BoozerRadialInterpolant
+from scipy.io import savemat
+from simsoptutils import *
+from scipy.fft import fft2, ifft2
+
+"""
+processes 'sfincsOutput.h5' files present in the directory.
+this script should be called from the directory containing the
+rN_0.xxxx directories (sfincsScan_4 run with adjustScript)
+"""
+### utility functions ###
+
+def index_along_dim(arr, dim, idx):
+    indexer = [slice(None)] * arr.ndim
+    indexer[dim] = idx
+    return arr[tuple(indexer)]
+
+def getPathToWout():
+    folders = os.listdir()
+    main_dir = os.getcwd()
+    for folder in folders:
+        if folder.startswith("rN"):
+            os.chdir(f"./{folder}")
+            with open(f"./input.namelist", "r") as f:
+                lines = f.readlines()
+
+            for line in lines:
+                line_list = line.split(" ")
+                if line_list[0] == "\tequilibriumFile":
+                    wout_file = line_list[2].replace('"', "").replace(".bc\n", ".nc")
+                    os.chdir(main_dir)
+                    return wout_file
+
+# ensures a plots folder in outputsDir
+if not os.path.exists("./plots"):
+    os.system("mkdir plots")
+
+class Parameter:
+    def __init__(self, name, label, scaling=1.0, speciesIndex=None):
+        self.name = name
+        self.label = label
+        self.scaling = scaling
+        self.speciesIndex = speciesIndex
+        self.data = None
+
+    def speciate(self):
+        assert self.data is not None, "No data to separate into species"
+        try:
+            shape = list(self.data.shape)
+            speciesDim = shape.index(2)
+            self.data = np.squeeze(index_along_dim(self.data, speciesDim, self.speciesIndex))
+        except:
+            try:
+                self.data = np.squeeze(self.data) # necessary to remove 'iterations' dimension of size 1, may need updating to include nonlinear solving method
+            except:
+                pass
+        return self
+
+
+### Normalization constants and other constants used in sfincs ###
+c = 299792458.0*u.m/u.s#m/s
+e = 1.602176634e-19*u.C #C
+RBar = 1.0*u.m #m
+nBar = 1e20/u.m/u.m/u.m #m^-3
+BBar = 1.0*u.T #Tesla
+TBar = 1000.0*u.eV #eV
+phiBar = 1000*u.V #Volts
+mBar = 1.67262192595e-27*u.kg #kg
+vBar = np.sqrt(2*TBar/mBar).to(u.m/u.s) #m/s
+
+### Parameters supported ###
+rN = Parameter("rN", r"$\sqrt{\psi_N}$")
+psiN = Parameter("psiN", r"$\psi_N$")
+FSAbootstrapCurrentDensity = Parameter("FSABjHatOverB0", r"Bootstrap Current $\langle \mathbf{j}\cdot\mathbf{B} \rangle/B_{00}$ [A$\mathrm{m}^{-2}$]"                                       , scaling=e*vBar*nBar)
+Er = Parameter("Er", r"$E_r$ [V/m]", phiBar/RBar)
+flow_i = Parameter("flow", r"Ion parallel flow velocity $\int d^3v v_{||} f_i$ [m/s]", scaling=nBar*vBar, speciesIndex=1)
+flow_e = Parameter("flow", r"Electron parallel flow velocity $\int d^3v v_{||} f_i$ [m/s]", scaling=nBar*vBar, speciesIndex=0)
+theta = Parameter("theta", r"$\theta$")
+zeta = Parameter("zeta", r"$\zeta$")
+n_e = Parameter("totalDensity", r"Electron density $n_e$ [\mathrm{m}^{-3}]", scaling=nBar, speciesIndex=0)
+n_i = Parameter("totalDensity", r"Ion density $n_i$ [\mathrm{m}^{-3}]", scaling=nBar, speciesIndex=1)
+vPar_i = Parameter("velocityUsingTotalDensity", r"Ion parallel flow velocity $\frac{1}{n_i}\int d^3v v_{||} f_i$ [m/s]", scaling=vBar, speciesIndex = 1)
+vPar_e = Parameter("velocityUsingTotalDensity", r"Electron parallel flow velocity $\frac{1}{n_e}\int d^3v v_{||} f_e$ [m/s]", scaling=vBar, speciesIndex = 0)
+VPrime = Parameter("VPrimeHat", r"$V'$ [m/T]", scaling=RBar/BBar)
+heatFlux_vm_psi_e = Parameter("heatFlux_vm_psiHat", r"Electron heat flux Q = whatever", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex = 0)
+heatFlux_vm_psi_i = Parameter("heatFlux_vm_psiHat", r"Ion heat flux Q = whatever", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex = 1)
+B = Parameter("BHat", r"Magnetic field strength $|B|$ [T]", scaling=BBar)
+B0 = Parameter("B0OverBBar", r"$|B_0|$ [T]", scaling=BBar)
+T_i = Parameter("THats", r"Ion temperature $T_i$ [eV]", scaling=TBar, speciesIndex=1)
+rough_n_i = Parameter("nHats", r"Ion density $n_i$ [$\mathrm{m}^{-3}$]", scaling=nBar, speciesIndex=1)
+a = Parameter("aHat", r"Minor radius $a$ [m]", scaling=RBar)
+dT_idr = Parameter("dTHatdrHat", r"Ion temperature gradient $dT_i/dr$ [eV/m]", scaling=TBar/RBar, speciesIndex=1)
+Delta = Parameter("Delta", r"Reference parameter")
+Bsuptheta = Parameter("BHat_sup_theta", r"$B^\theta$ [T/M]", scaling = BBar/RBar)
+Bsupzeta = Parameter("BHat_sup_zeta", r"$B^\zeta$ [T/M]", scaling = BBar/RBar)
+
+def valsafe(quantity):
+    try:
+        return quantity.value
+    except:
+        try:
+            ls = []
+            for q in quantity:
+                ls.append(valsafe(q))
+            try:
+                return np.array(ls)
+            except:
+                return ls
+        except:
+            return quantity
+
+def parseHDF5(folder, parameter):
+    f = h5py.File(f"./{folder}/sfincsOutput.h5", 'r')
+    assert parameter.name in list(f.keys()), "invalid sfincs parameter provided to parseHDF5"
+    paramDataset = f[parameter.name]
+    parameter.data = paramDataset[()]*parameter.scaling
+    return parameter.speciate()
+    
+def plotProfile(parameter, radialCoordinate, plot=True, sort=True):
+    dirfiles = os.listdir()
+    radialCoords = []
+    vals = []
+    for file in dirfiles:
+        if not file.startswith("rN"):
+            continue
+        radialCoords.append(parseHDF5(f"{file}", radialCoordinate).data)
+        vals.append(parseHDF5(f"{file}", parameter).data)
+    
+    if sort:
+        radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+        radialCoords = list(radialCoords)
+        vals = list(vals)
+
+    if plot:
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot()
+        ax.plot(valsafe(radialCoords), valsafe(vals), color='#012169', alpha=0.7)
+        ax.plot(valsafe(radialCoords), valsafe(vals), marker='o', linestyle='None', color='#012169')
+        ax.set_xlabel(radialCoordinate.label, fontsize=24)
+        ax.set_ylabel(parameter.label, fontsize=24)
+        ax.tick_params(axis='both', labelsize=20)
+        fig.savefig(f"./plots/{parameter.name}_vs_{radialCoordinate.name}.jpeg", dpi=320)
+        print(f"Plot {parameter.name}_vs_{radialCoordinate.name} saved.")
+
+    return radialCoords, vals
+
+def plotHeatmap(folder, parameter, save=True, specificDirectory=None, verb=True, nametag=None, contourLevels=None, cmap="viridis"):
+    parameter = parseHDF5(folder, parameter)
+    zetas = parseHDF5(folder, zeta)
+    thetas = parseHDF5(folder, theta)
+    Z, T = np.meshgrid(zetas.data, thetas.data)
+    fig = plt.figure(figsize=(12, 9))
+    ax = fig.add_subplot()
+    ax.set_title(folder, fontsize=24)
+    if contourLevels is not None:
+        p=plt.contourf(Z, T, np.transpose(valsafe(parameter.data)), levels=contourLevels, cmap=cmap)
+    else:
+        p=plt.contourf(Z, T, np.transpose(valsafe(parameter.data)), cmap=cmap)
+    cbar = plt.colorbar(p, cmap=cmap)
+    cbar.ax.tick_params(labelsize=20)
+    cbar.set_label(parameter.label, size=24)
+    ax.set_xlabel(zetas.label, fontsize=24)
+    ax.set_ylabel(thetas.label, fontsize=24)
+    ax.tick_params(axis='both', labelsize=20)
+    if specificDirectory is None:
+        specificDirectory = "plots"
+    if save:
+        fig.savefig(f"./{specificDirectory}/{parameter.name}{parameter.speciesIndex}_heatmap{nametag}.png", dpi=320)
+        if verb:
+            print(f"Plot {parameter.name}{parameter.speciesIndex}_heatmap{nametag} saved.")
+    plt.close(fig)
+    return Z, T, parameter
+
+def makeHeatmapGif(parameter, radialCoordinate, contourLevels=None, cmap="turbo"):
+    dirfiles = os.listdir()
+    radialCoords = []
+    imageFiles = []
+    if os.path.exists("./gif_files"):
+        os.system("rm -r gif_files")
+    os.system("mkdir gif_files")
+    for i, file in enumerate(tqdm(dirfiles, desc="    Writing image files...")):
+        if not file.startswith("rN"):
+            continue
+        radialCoords.append(parseHDF5(f"{file}", radialCoordinate).data)
+        plotHeatmap(file, parameter, specificDirectory="gif_files", nametag=f"{i}", verb=False, contourLevels=contourLevels, cmap=cmap)
+        imageFiles.append(f"./gif_files/{parameter.name}{parameter.speciesIndex}_heatmap{i}.png")
+
+    radialCoords, imageFiles = zip(*sorted(zip(radialCoords, imageFiles), key=lambda pair: pair[0]))
+    radialCoords = list(radialCoords)
+    imageFiles = list(imageFiles)
+    
+    with imageio.get_writer(f'{parameter.name}{parameter.speciesIndex}.gif', mode='I', fps=2) as writer:
+        for filename in tqdm(imageFiles, desc="    Assembling .gif...    "):
+            image = imageio.imread(filename)
+            writer.append_data(image)
+        print("    Writing to file...")
+
+    os.system("rm -r gif_files")
+    print(f"Created {parameter.name}{parameter.speciesIndex}.gif.")
+    
+def getLCFS():
+    return "_".join(sorted([s.split("_") for s in [f for f in os.listdir() if f.startswith("rN")]], key= lambda pair: float(pair[1]))[-1])
+
+def getNeoclassicalHeatFlux(folder):
+    hf_e = parseHDF5(folder, heatFlux_vm_psi_e)
+    print(hf_e.data)
+    hf_i = parseHDF5(folder, heatFlux_vm_psi_i)
+    print(hf_i.data)
+    V = parseHDF5(folder, VPrime)
+    return ((hf_e.data+hf_i.data)*V.data).to(u.W)
+    
+def getGyroBohmHeatFluxEstimate(folder):
+    Q_GB = 1.0
+    surf_area = 2*u.m*u.m # guess of surface area of LCFS
+    Ti = parseHDF5(folder, T_i).data.to(u.kg*u.m*u.m/u.s/u.s)
+    mi = 3.343e-27*u.kg
+    dTidr = parseHDF5(folder, dT_idr).data.to(u.kg*u.m/u.s/u.s)
+    ni = parseHDF5(folder, rough_n_i).data
+    mr = parseHDF5(folder, a).data
+    mf = parseHDF5(folder, B0).data
+    Q_GB *= (mi*np.sqrt(2*Ti/mi)/(e*mf))**2
+    Q_GB *= np.sqrt(2*Ti/mi)
+    Q_GB *= abs(dTidr)**3
+    Q_GB *= abs(Ti)**(-2)
+    Q_GB *= ni*mr*surf_area
+    #print("L_T", Ti/dTidr, "T_i", Ti, "dT_i/dr", dTidr, "n_i", ni, "a", mr, "B", mf)
+
+    # new estimate
+    """
+    Q_GB = 1.0
+    Q_GB *= (mi/(e*mf))**2
+    Q_GB *= (2*Ti/mi)**(3/2)
+    Q_GB *= abs(dTidr)*ni*mr
+    """
+    return Q_GB.to(u.W)
+    
+def make_qlcfs_file(lcfs=None):
+    print("Making qlcfs.npy...")
+    if lcfs is None:
+        lcfs = getLCFS()
+    Q_N = getNeoclassicalHeatFlux(lcfs)
+    Q_T = getGyroBohmHeatFluxEstimate(lcfs)
+    print(f"  Neoclassical heat flux (LCFS)-- {Q_N}")
+    print(f"  Turbulent heat flux (LCFS)----- {Q_T}")
+    np.save("qlcfs.npy", np.array(valsafe([Q_N, Q_T])))
+    print("qlcfs.npy saved.")
+
+def makeCSXSurface(folder, colorparam=None, savematlab=True):
+    psi_N = parseHDF5(folder, psiN).data
+    thetas = parseHDF5(folder, theta).data
+    zetas1 = parseHDF5(folder, zeta).data
+    zetas2 = zetas1 + np.pi
+    zetas = np.concatenate((zetas1, zetas2))
+    thetas = np.append(thetas, thetas[0])
+    zetas = np.append(zetas, zetas[0])
+
+    THETA, ZETA = np.meshgrid(thetas, zetas)
+    PSIN = np.ones_like(ZETA)*psi_N
+
+    if colorparam is not None:
+        c = valsafe(parseHDF5(folder, colorparam).data)
+        c = np.vstack((c, c))
+        c_h = np.atleast_2d(c[:, 0]).T
+        c = np.hstack((c, c_h))
+        c_v = np.atleast_2d(c[0, :])
+        C = np.vstack((c, c_v))
+        plotlabel = colorparam.name
+        
+    bri = getBoozerRadialInterpolant(getPathToWout())
+    points = unrollMeshgrid(PSIN, THETA, ZETA)
+    points = np.ascontiguousarray(points, dtype=np.float64)
+    points = cartesian(bri, points)
+    points = np.ascontiguousarray(points, dtype=np.float64)
+    X, Y, Z = rollMeshgrid(len(zetas), len(thetas), points)
+    if colorparam is None:
+        C = X #just to give it some color
+        plotlabel = "X"
+    if savematlab is True:
+        mdic = {"X": X, "Y": Y, "Z": Z, "C": C}
+        savemat(f"./csxSurface_{folder}_{plotlabel}.mat", mdic)
+
+def makePeriodic(thetas, zetas, paramdata):
+    thetas = np.append(thetas, 2*np.pi)
+    zetas = np.concatenate((zetas, zetas+np.pi))
+    zetas = np.append(zetas, 2*np.pi)
+    c = paramdata
+    c = np.vstack((c, c))
+    c_h = np.atleast_2d(c[:, 0]).T
+    c = np.hstack((c, c_h))
+    c_v = np.atleast_2d(c[0, :])
+    C = np.vstack((c, c_v))
+    return thetas, zetas, C
+
+def scale_by_epsb(B, epsb):
+    """
+    given a magnetic field B, returns the B corresponding
+    to the 1/B^2 modified by scaling the symmetry-breaking 
+    modes by epsb
+    """
+    FinvB2 = fft2(1/(B**2))
+    FinvB2_copy = np.ones_like(FinvB2)*epsb
+    FinvB2_copy[:, 0] = np.ones_like(FinvB2_copy[:, 0])
+    return np.real(ifft2(FinvB2*FinvB2_copy))**(-0.5)
+
+def getQSError(B):
+    """
+    compute [ \sum_{m, n\neq 0} (B_{mn}/B_{00})^2 ]^1/2
+    note that positive and negative m and n are included
+    here, QS means QA
+    """
+    Bmn = fft2(B)
+    return np.sqrt(np.sum(abs((Bmn/Bmn[0, 0])[:, 1:])**2))
+
+def getUnitVectorB(folder):
+    psi_N = parseHDF5(folder, psiN).data
+    thetas = parseHDF5(folder, theta).data
+    zetas1 = parseHDF5(folder, zeta).data
+    zetas2 = zetas1 + np.pi
+    zetas = np.concatenate((zetas1, zetas2))
+    thetas = np.append(thetas, thetas[0])
+    zetas = np.append(zetas, zetas[0])
+
+    THETA, ZETA = np.meshgrid(thetas, zetas)
+    PSIN = np.ones_like(ZETA)*psi_N
+    
+    parameter_outputs_list = []
+    for param in [B, Bsupzeta, Bsuptheta]:
+        c = valsafe(parseHDF5(folder, param).data)
+        c = np.vstack((c, c))
+        c_h = np.atleast_2d(c[:, 0]).T
+        c = np.hstack((c, c_h))
+        c_v = np.atleast_2d(c[0, :])
+        C = np.vstack((c, c_v))
+        parameter_outputs_list.append(C)
+    
+    modB, Bszeta, Bstheta = parameter_outputs_list
+    bri = getBoozerRadialInterpolant(getPathToWout())
+    points = unrollMeshgrid(PSIN, THETA, ZETA)
+    points = np.ascontiguousarray(points, dtype=np.float64)
+    moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
+    moddrdtheta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)
+    moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+    btheta = Bstheta*moddrdtheta/modB
+    bzeta = Bszeta*moddrdzeta/modB
+    return THETA, ZETA, btheta, bzeta
+
+def makeStreamPlot(folder, colorparam=B):
+    THETA, ZETA, btheta, bzeta = getUnitVectorB(folder)
+    modB = valsafe(parseHDF5(folder, colorparam).data)
+    modB = np.vstack((modB, modB)).T
+    thetas = THETA[0]
+    zetas = ZETA[:,0]
+    thetas = thetas[:-1]
+    zetas = zetas[:-1]
+    bzeta = bzeta[:-1, :-1].T
+    btheta = btheta[:-1, :-1].T
+    C = np.hypot(bzeta, btheta)
+    fig = plt.figure(figsize=(16, 8))
+    ax = fig.add_subplot()
+    strm = ax.streamplot(zetas, thetas, modB*bzeta, modB*btheta, color=modB)
+    fig.colorbar(strm.lines)
+    fig.show()
+    fig.savefig(f"./plots/stream_{colorparam.name}_{colorparam.speciesIndex}.jpeg")
+
+def makeQuiverPlotUnitB(folder):
+    THETA, ZETA, btheta, bzeta = getUnitVectorB(folder)
+    C = np.hypot(bzeta, btheta)
+    fig = plt.figure(figsize=(16, 8))
+    ax = fig.add_subplot()
+    quiv = ax.quiver(ZETA, THETA, bzeta/C, btheta/C, C, headlength=3.0)
+    fig.colorbar(quiv)
+    fig.show()
+    fig.savefig("./plots/unitbquivC.jpeg")
+    
+if __name__ == "__main__":
+    # makeStreamPlot("rN_0.95", vPar_e)
+    # makeStreamPlot("rN_0.95", vPar_i)
+    make_qlcfs_file()
+
+"""
+folder = "rN_0.95"
+plotProfile(FSAbootstrapCurrentDensity, rN)
+plotProfile(Er, rN)
+plotProfile(FSAbootstrapCurrentDensity, Er)
+plotProfile(rN, psiN)
+plotHeatmap(folder, vPar_i)
+plotHeatmap(folder, vPar_e)
+makeHeatmapGif(vPar_i, rN, contourLevels=np.linspace(-125, 155, 225))
+make_qlcfs_file()
+
+makeCSXSurface("rN_0.95", colorparam=B)
+makeCSXSurface("rN_0.95", colorparam=vPar_i)
+makeCSXSurface("rN_0.95", colorparam=vPar_e)
+"""
+
+# for making confirmation plots
+folders = ["esym_0.1", "esym_0.6", "esym_0.9", "rN_0.95"]
+epsbs = [0.1, 0.6, 0.9, 1.0]
+QSErrors = []
+for file, epsb in zip(folders, epsbs):
+    thetas = parseHDF5(file, theta).data
+    zetas1 = parseHDF5(file, zeta).data
+    zetas = np.concatenate((zetas1, zetas1 + np.pi))
+    modB = valsafe(parseHDF5(file, B).data)
+    modB = np.vstack((modB, modB)).T
+    QSErrors.append(getQSError(modB))
+
+fig = plt.figure()
+ax = fig.add_subplot()
+ax.plot(epsbs, QSErrors, marker='o', color="black")
+ax.set_xlabel(r"$\epsilon_{sb}$", fontsize=18)
+ax.set_ylabel(r"QS Error $S = \sqrt{\sum_{m, n\neq 0}\frac{B_{mn}^2}{B_{00}^2}}$", fontsize=18)
+plt.tight_layout()
+fig.savefig("./plots/epvserr.jpeg")
+print(QSErrors)
+
+t1, t2 = 0, 2*np.pi
+fig = plt.figure(figsize=(9, 13))
+plt.tight_layout()
+ax = fig.add_subplot(411)
+file = "rN_0.95"
+thetas = parseHDF5(file, theta).data
+zetas = parseHDF5(file, zeta).data
+zetas = np.concatenate((zetas, zetas+np.pi))
+modB = valsafe(parseHDF5(file, B).data)
+modB = np.vstack((modB, modB))
+modB = modB.T
+t2z = zetas[-1]
+t2t = thetas[-1]
+plt.contourf(zetas, thetas, modB, levels=13)
+plt.colorbar()
+ax.set_title(r"$\epsilon_{sb} = 1$")
+ax.set_xticks([t1, t2z])
+ax.set_xticklabels(["0", r"$2\pi$"])
+ax.set_yticks([t1, t2t])
+ax.set_yticklabels(["0", r"$2\pi$"])
+
+ax = fig.add_subplot(412)
+modB = scale_by_epsb(modB, 0.1)
+modB_michael=modB
+plt.contourf(zetas, thetas, modB, levels=13)
+plt.colorbar()
+ax.set_title(r"$\epsilon_{sb} = 0.1$ (michael)")
+ax.set_xticks([t1, t2z])
+ax.set_xticklabels(["0", r"$2\pi$"])
+ax.set_yticks([t1, t2t])
+ax.set_yticklabels(["0", r"$2\pi$"])
+
+ax = fig.add_subplot(413)
+file = "esym_0.1"
+thetas = parseHDF5(file, theta).data
+zetas = parseHDF5(file, zeta).data
+zetas = np.concatenate((zetas, zetas + np.pi))
+modB = valsafe(parseHDF5(file, B).data)
+modB = np.vstack((modB, modB))
+
+modB = modB.T
+
+plt.contourf(zetas, thetas, modB, levels=13)
+plt.colorbar()
+ax.set_title(r"$\epsilon_{sb} = 0.1$ (mike)")
+ax.set_xticks([t1, t2z])
+ax.set_xticklabels(["0", r"$2\pi$"])
+ax.set_yticks([t1, t2t])
+ax.set_yticklabels(["0", r"$2\pi$"])
+
+ax = fig.add_subplot(414)
+plt.contourf(zetas, thetas, modB - modB_michael, levels = 13)
+plt.colorbar()
+ax.set_title("mike - michael")
+
+ax.set_xticks([t1, t2z])
+ax.set_xticklabels(["0", r"$2\pi$"])
+ax.set_yticks([t1, t2t])
+ax.set_yticklabels(["0", r"$2\pi$"])
+
+fig.supxlabel(r"$\zeta$", y = 0.04, fontsize = 18)
+fig.supylabel(r"$\theta$", x = 0.05, fontsize = 18)
+fig.suptitle(r"$|B|$ [T]", y = 0.95, fontsize = 18)
+fig.savefig("./plots/comparison_0.1.jpeg")
+#end confirmation plots
+
+
+
+
+
