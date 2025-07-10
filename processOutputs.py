@@ -94,12 +94,21 @@ heatFlux_vm_psi_i = Parameter("heatFlux_vm_psiHat", r"Ion heat flux Q = whatever
 B = Parameter("BHat", r"Magnetic field strength $|B|$ [T]", scaling=BBar)
 B0 = Parameter("B0OverBBar", r"$|B_0|$ [T]", scaling=BBar)
 T_i = Parameter("THats", r"Ion temperature $T_i$ [eV]", scaling=TBar, speciesIndex=1)
+T_e = Parameter("THats", r"Electron temperature $T_e$ [eV]$", scaling=TBar, speciesIndex=0)
 rough_n_i = Parameter("nHats", r"Ion density $n_i$ [$\mathrm{m}^{-3}$]", scaling=nBar, speciesIndex=1)
 a = Parameter("aHat", r"Minor radius $a$ [m]", scaling=RBar)
 dT_idr = Parameter("dTHatdrHat", r"Ion temperature gradient $dT_i/dr$ [eV/m]", scaling=TBar/RBar, speciesIndex=1)
 Delta = Parameter("Delta", r"Reference parameter")
 Bsuptheta = Parameter("BHat_sup_theta", r"$B^\theta$ [T/M]", scaling = BBar/RBar)
 Bsupzeta = Parameter("BHat_sup_zeta", r"$B^\zeta$ [T/M]", scaling = BBar/RBar)
+iota = Parameter("iota", r"Rotational transform $\iota$")
+G = Parameter("GHat", r"Covariant toroidal Boozer component", scaling = BBar * RBar)
+I = Parameter("IHat", r"Covariant poloidal Boozer component", scaling = BBar * RBar)
+dPhidpsi = Parameter("dPhiHatdpsiHat", r"$\frac{\partial \Phi}{\partial \psi}$", scaling = phiBar / (BBar * RBar * RBar))
+dn_edpsi = Parameter("dnHatdpsiHat", r"blah blah", scaling = nBar / (BBar * RBar * RBar), speciesIndex=0)
+dn_idpsi = Parameter("dnHatdpsiHat", r"blah blah", scaling = nBar / (BBar * RBar * RBar), speciesIndex=1)
+dT_edpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar * RBar), speciesIndex=0)
+dT_idpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar * RBar), speciesIndex=1)
 
 def valsafe(quantity):
     try:
@@ -318,14 +327,15 @@ def getQSError(B):
     Bmn = fft2(B)
     return np.sqrt(np.sum(abs((Bmn/Bmn[0, 0])[:, 1:])**2))
 
-def getUnitVectorB(folder):
+def getUnitVectorB(folder, rollover=False):
     psi_N = parseHDF5(folder, psiN).data
     thetas = parseHDF5(folder, theta).data
     zetas1 = parseHDF5(folder, zeta).data
     zetas2 = zetas1 + np.pi
     zetas = np.concatenate((zetas1, zetas2))
-    thetas = np.append(thetas, thetas[0])
-    zetas = np.append(zetas, zetas[0])
+    if rollover:
+        thetas = np.append(thetas, thetas[0])
+        zetas = np.append(zetas, zetas[0])
 
     THETA, ZETA = np.meshgrid(thetas, zetas)
     PSIN = np.ones_like(ZETA)*psi_N
@@ -334,10 +344,11 @@ def getUnitVectorB(folder):
     for param in [B, Bsupzeta, Bsuptheta]:
         c = valsafe(parseHDF5(folder, param).data)
         c = np.vstack((c, c))
-        c_h = np.atleast_2d(c[:, 0]).T
-        c = np.hstack((c, c_h))
-        c_v = np.atleast_2d(c[0, :])
-        C = np.vstack((c, c_v))
+        if rollover:
+            c_h = np.atleast_2d(c[:, 0]).T
+            c = np.hstack((c, c_h))
+            c_v = np.atleast_2d(c[0, :])
+            C = np.vstack((c, c_v))
         parameter_outputs_list.append(C)
     
     modB, Bszeta, Bstheta = parameter_outputs_list
@@ -378,16 +389,151 @@ def makeQuiverPlotUnitB(folder):
     fig.colorbar(quiv)
     fig.show()
     fig.savefig("./plots/unitbquivC.jpeg")
+
+def getFullV(folder, speciesIndex=0, omitPerp=False, plot=False):
+    thetas = parseHDF5(folder, theta).data
+    zetas = parseHDF5(folder, zeta).data
+    zetas = np.concatenate((zetas, zetas + np.pi))
+    psi_N = parseHDF5(folder, psiN).data
+    
+    THETAS, ZETAS = np.meshgrid(thetas, zetas)
+    PSIN = np.ones_like(ZETAS)*psi_N
+
+    # Computing the parallel flow components
+    # stored as the arrays multiplying dr/dtheta, dr/dtheta
+    
+    assert speciesIndex in [0, 1], "must give a valid speciesIndex -- 0 (electrons), 1 (ions)"
+    if speciesIndex == 0:
+        vPar = parseHDF5(folder, vPar_e).data
+    else:
+        vPar = parseHDF5(folder, vPar_i).data
+
+    vPar_unit = vPar.unit
+    vPar = valsafe(vPar)
+    vPar = np.vstack((vPar, vPar))
+    
+    Gval = parseHDF5(folder, G).data
+    G_unit = Gval.unit
+    G_array = np.ones_like(ZETAS)*valsafe(Gval)
+
+    Ival = parseHDF5(folder, I).data
+    I_unit = Ival.unit
+    I_array = np.ones_like(ZETAS)*valsafe(Ival)
+
+    iotaval = parseHDF5(folder, iota).data
+
+    modB = parseHDF5(folder, B).data
+    modB_unit = modB.unit
+    modB = valsafe(modB)
+    modB = np.vstack((modB, modB))
+
+    vPar_theta = vPar*modB*iotaval / (G_array + iotaval*I_array)
+    vPar_theta_unit = vPar_unit*modB_unit / (G_unit)
+    
+    vPar_zeta = vPar*modB / (G_array + iotaval*I_array)
+    vPar_zeta_unit = vPar_theta_unit
+
+    # Now computing the perpendicular component of the flow velocity
+
+    # First, the B cross nabla psi over B^2 components are computed
+    
+    diamag_theta = G_array / (G_array + iotaval*I_array)
+    diamag_zeta = I_array / (G_array + iotaval*I_array)
+
+    # next the scaling factor (w factor in Helander + Sigmar)
+    
+    dPhi_dpsi = parseHDF5(folder, dPhidpsi).data
+    
+    if speciesIndex == 0:
+        dTdpsi = dT_edpsi
+        dndpsi = dn_edpsi
+        n = n_e
+        T = T_e
+        Z = -1.0
+    else:
+        dTdpsi = dT_idpsi
+        dndpsi = dn_idpsi
+        n = n_i
+        T = T_i
+        Z = 1.0
+
+    dn_dpsi = parseHDF5(folder, dndpsi).data
+    dT_dpsi = parseHDF5(folder, dTdpsi).data
+    Tval = parseHDF5(folder, T).data
+
+    n_array = parseHDF5(folder, n).data
+    n_array = np.vstack((n_array, n_array))
+    
+    w = dPhi_dpsi + (1/ (Z * e * n_array))*(n_array*dT_dpsi + Tval*dn_dpsi)
+    
+    # combining the scale factor with the directional arrays
+
+    vPerp_theta = valsafe(diamag_theta * w)
+    vPerp_zeta = valsafe(diamag_zeta * w)
+    
+    # combining parallel and perpendicular parts
+    scale = 1.0
+    if omitPerp is True:
+        scale = 0.0
+
+    v_theta = vPar_theta*vPar_theta_unit + vPerp_theta*scale*w.unit
+    v_zeta = vPar_zeta*vPar_zeta_unit + vPerp_zeta*scale*w.unit
+
+    if plot is True:
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T))
+        fig.savefig(f"./plots/fullV_{speciesIndex}_{omitPerp}.jpeg")
+
+    return v_theta, v_zeta
+
+def getAngularMomentumDensity(folder, speciesIndex=0):
+    
+    v_theta, v_zeta = getFullV(folder, speciesIndex=speciesIndex)
+
+    # need to multiply by mass density
+
+    thetas = parseHDF5(folder, theta).data
+    zetas = parseHDF5(folder, zeta).data
+    zetas = np.concatenate((zetas, zetas + np.pi))
+    psi_N = parseHDF5(folder, psiN).data
+
+    THETAS, ZETAS = np.meshgrid(thetas, zetas)
+    PSIN = np.ones_like(ZETAS)*psi_N
+
+    if speciesIndex == 0:
+        n = n_e
+        m = 9.10938e-31*u.kg
+    else:
+        n = n_i
+        m = 4.6518341428e-26*u.kg
+
+    mass_dens = m*parseHDF5(folder, n).data
+    mass_dens = np.vstack((valsafe(mass_dens), valsafe(mass_dens)))*mass_dens.unit
+    
+    points = np.ascontiguousarray(unrollMeshgrid(PSIN, THETAS, ZETAS), dtype=np.float64)
+    bri = getBoozerRadialInterpolant(getPathToWout())
+    _, moddrdzeta = getGradientMagnitudes(bri, points)
+    dotproduct = get_drdzeta_dot_drdtheta(bri, points)
+    dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+    moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+
+    AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
+    print(AngularMomentumField)
+
     
 if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_e)
     # makeStreamPlot("rN_0.95", vPar_i)
     make_qlcfs_file()
+    getFullV("rN_0.95", omitPerp=True, plot=True)
+    getAngularMomentumDensity("rN_0.95")
 
 """
 folder = "rN_0.95"
 plotProfile(FSAbootstrapCurrentDensity, rN)
-plotProfile(Er, rN)
+plot
+Profile(Er, rN)
 plotProfile(FSAbootstrapCurrentDensity, Er)
 plotProfile(rN, psiN)
 plotHeatmap(folder, vPar_i)
@@ -398,7 +544,6 @@ make_qlcfs_file()
 makeCSXSurface("rN_0.95", colorparam=B)
 makeCSXSurface("rN_0.95", colorparam=vPar_i)
 makeCSXSurface("rN_0.95", colorparam=vPar_e)
-"""
 
 # for making confirmation plots
 folders = ["esym_0.1", "esym_0.6", "esym_0.9", "rN_0.95"]
@@ -486,7 +631,7 @@ fig.supylabel(r"$\theta$", x = 0.05, fontsize = 18)
 fig.suptitle(r"$|B|$ [T]", y = 0.95, fontsize = 18)
 fig.savefig("./plots/comparison_0.1.jpeg")
 #end confirmation plots
-
+"""
 
 
 

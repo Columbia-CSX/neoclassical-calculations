@@ -71,6 +71,20 @@ def getGradientMagnitudes(bri, points):
     normdrdtheta = np.sqrt(dRdtheta**2+(R*dzetadtheta-R*dnudtheta)**2+dZdtheta**2)
     return np.squeeze(normdrdtheta), np.squeeze(normdrdzeta)
 
+def get_drdzeta_dot_drdtheta(bri, points):
+    bri.set_points(points)
+    R = bri.R()
+    dRdtheta = bri.dRdtheta()
+    dRdzeta = bri.dRdzeta()
+    dnudtheta = bri.dnudtheta()
+    dzetadtheta = bri.iota()**(-1)
+    dnudzeta = bri.dnudzeta()
+    dphidtheta = dzetadtheta - dnudtheta
+    dphidzeta = 1.0 - dnudzeta
+    dZdtheta = bri.dZdtheta()
+    dZdzeta = bri.dZdzeta()
+    return np.squeeze(dRdtheta*dRdzeta + R*R*dphidtheta*dphidzeta + dZdtheta*dZdzeta)
+
 if __name__ == '__main__':
     bri = getBoozerRadialInterpolant("/global/homes/m/michaelc/stelloptPlusSfincs/equilibria/wout_csx_ls_4.5_0.5T.nc")
     bri.set_points(np.array([[0.1, 0.1, 0.1], [0.5, 0.5, 0.5]]))
