@@ -10,6 +10,13 @@ from scipy.io import savemat
 from simsoptutils import *
 from scipy.fft import fft2, ifft2
 
+try:
+    from nmmn.plots import parulacmap
+    parula = parulacmap()
+    parulacmap = parula
+except:
+    parulacmap = "plasma"
+
 """
 processes 'sfincsOutput.h5' files present in the directory.
 this script should be called from the directory containing the
@@ -390,7 +397,7 @@ def makeQuiverPlotUnitB(folder):
     fig.show()
     fig.savefig("./plots/unitbquivC.jpeg")
 
-def getFullV(folder, speciesIndex=0, omitPerp=False, plot=False):
+def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas + np.pi))
@@ -443,6 +450,8 @@ def getFullV(folder, speciesIndex=0, omitPerp=False, plot=False):
     # next the scaling factor (w factor in Helander + Sigmar)
     
     dPhi_dpsi = parseHDF5(folder, dPhidpsi).data
+
+    label_for_plot = ["Ion", " ", "flow velocity [km/s]"]
     
     if speciesIndex == 0:
         dTdpsi = dT_edpsi
@@ -450,6 +459,7 @@ def getFullV(folder, speciesIndex=0, omitPerp=False, plot=False):
         n = n_e
         T = T_e
         Z = -1.0
+        label_for_plot[0] = "Electron"
     else:
         dTdpsi = dT_idpsi
         dndpsi = dn_idpsi
@@ -472,18 +482,47 @@ def getFullV(folder, speciesIndex=0, omitPerp=False, plot=False):
     vPerp_zeta = valsafe(diamag_zeta * w)
     
     # combining parallel and perpendicular parts
-    scale = 1.0
+    scalePerp = 1.0
     if omitPerp is True:
-        scale = 0.0
+        scalePerp = 0.0
+        label_for_plot[1] = " parallel "  
 
-    v_theta = vPar_theta*vPar_theta_unit + vPerp_theta*scale*w.unit
-    v_zeta = vPar_zeta*vPar_zeta_unit + vPerp_zeta*scale*w.unit
+    scalePar = 1.0
+    if omitPar is True:
+        scalePar = 0.0
+        label_for_plot[1] = " perpendicular "
+
+    v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
+    v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
+    
 
     if plot is True:
-        fig = plt.figure()
+        # gets magnitude
+        ll = label_for_plot
+        label = ll[0]+ll[1]+ll[2]
+        bri = getBoozerRadialInterpolant(getPathToWout())
+        points = unrollMeshgrid(PSIN, THETAS, ZETAS)
+        moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
+        dotproduct = get_drdzeta_dot_drdtheta(bri, points)
+        moddrdtheta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)
+        moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+        dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+        modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
+        fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
-        strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T))
-        fig.savefig(f"./plots/fullV_{speciesIndex}_{omitPerp}.jpeg")
+        tickpositions = [0, np.pi]
+        ticklabels = ["0", "$\pi$"]
+        ax.set_xlabel("$\zeta$", fontsize=22)
+        ax.set_ylabel(r"$\theta$", fontsize=22)
+        ax.set_xticks(tickpositions, ticklabels, fontsize=16)
+        ax.set_yticks(tickpositions, ticklabels, fontsize=16)
+        lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
+        strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
+        cbar = fig.colorbar(strm.lines)
+        cbar.ax.tick_params(labelsize=16)
+        cbar.set_label(label, size=22)
+        fig.tight_layout()
+        fig.savefig(f"./plots/fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
 
     return v_theta, v_zeta
 
@@ -527,6 +566,11 @@ if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_i)
     make_qlcfs_file()
     getFullV("rN_0.95", omitPerp=True, plot=True)
+    getFullV("rN_0.95", omitPar=True, plot=True)
+    getFullV("rN_0.95", plot=True, speciesIndex=0)
+    getFullV("rN_0.95", plot=True, speciesIndex=1)
+    getFullV("rN_0.95", omitPerp=True, plot=True, speciesIndex=1)
+    getFullV("rN_0.95", omitPar=True, plot=True, speciesIndex=1)
     getAngularMomentumDensity("rN_0.95")
 
 """

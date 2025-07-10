@@ -7,7 +7,7 @@ def getBoozerRadialInterpolant(wout_file):
 
 def unrollMeshgrid(X, Y, Z):
     """Returns an array of points (N, 3) based off of a meshed grid"""
-    return np.vstack((X.flatten(), Y.flatten(), Z.flatten())).T
+    return np.ascontiguousarray(np.vstack((X.flatten(), Y.flatten(), Z.flatten())).T, dtype=np.float64)
 
 def rollMeshgrid(len_xcoords, len_ycoords, points):
     """ Takes the length of the x and y coordinate
