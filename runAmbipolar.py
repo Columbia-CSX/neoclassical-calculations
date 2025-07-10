@@ -10,7 +10,7 @@ rootChoice = parser.parse_args().rootChoice
 to be run after running runRadErScan.py (in the same configuration directory)
 """
 main_dir = os.getcwd()
-os.system("python /global/homes/m/michaelc/stelloptPlusSfincs/stelloptPlusSfincs/chooseErs.py --sfincsDir ./raderscan --noRun")
+os.system("python $UTILS_DIR/parseRadErScan.py")
 os.chdir("./raderscan/determineEr")
 os.system(f"python $UTILS_DIR/interpret.py --rootChoice {rootChoice}")
 os.chdir(main_dir)

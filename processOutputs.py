@@ -45,10 +45,6 @@ def getPathToWout():
                     os.chdir(main_dir)
                     return wout_file
 
-# ensures a plots folder in outputsDir
-if not os.path.exists("./plots"):
-    os.system("mkdir plots")
-
 class Parameter:
     def __init__(self, name, label, scaling=1.0, speciesIndex=None):
         self.name = name
@@ -116,6 +112,8 @@ dn_edpsi = Parameter("dnHatdpsiHat", r"blah blah", scaling = nBar / (BBar * RBar
 dn_idpsi = Parameter("dnHatdpsiHat", r"blah blah", scaling = nBar / (BBar * RBar * RBar), speciesIndex=1)
 dT_edpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar * RBar), speciesIndex=0)
 dT_idpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar * RBar), speciesIndex=1)
+eFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Electron radial flux $\langle \int d^3 v f_e \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=0)
+iFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Ion radial flux $\langle \int d^3 v f_i \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=1)
 
 def valsafe(quantity):
     try:
@@ -560,11 +558,27 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
     print(AngularMomentumField)
 
+def getRadialCurrent(folder):
+    # FSA < J dot \nabla \psi > = fsaj
+    eFlux = parseHDF5(folder, eFlux_vm_psi).data
+    iFlux = parseHDF5(folder, iFlux_vm_psi).data
+    vprime = parseHDF5(folder, VPrime).data
+    fsaj = e*iFlux - e*eFlux
+    radial_current = fsaj*vprime
+    radial_current.to(u.A)
+    return radial_current
     
+
 if __name__ == "__main__":
+
+    # ensures a plots folder in outputsDir
+    if not os.path.exists("./plots"):
+        os.system("mkdir plots")
+
     # makeStreamPlot("rN_0.95", vPar_e)
     # makeStreamPlot("rN_0.95", vPar_i)
     make_qlcfs_file()
+    getRadialCurrent("rN_0.95")
     getFullV("rN_0.95", omitPerp=True, plot=True)
     getFullV("rN_0.95", omitPar=True, plot=True)
     getFullV("rN_0.95", plot=True, speciesIndex=0)

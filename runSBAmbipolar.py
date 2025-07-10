@@ -8,10 +8,9 @@ rootChoice = parser.parse_args().rootChoice
 
 main_dir = os.getcwd()
 
-esb_dirs = os.listdir()
+esb_dirs = [folder for folder in os.listdir() if folder.startswith("esb")]
 for folder in esb_dirs:
     os.chdir(f"./{folder}")
-    os.system("ls")
     os.system(f"python $UTILS_DIR/runAmbipolar.py --rootChoice {rootChoice}")
     os.chdir(main_dir)
 

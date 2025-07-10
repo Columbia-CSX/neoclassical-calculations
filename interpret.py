@@ -18,7 +18,7 @@ files = os.listdir('./')
 rNs = []
 datas = []
 for file in files:
-    if file.endswith('Jr-vs-Er.dat'):
+    if file.endswith('Ir-vs-Er.dat'):
         datas.append(np.transpose(np.loadtxt(file)))
         rNs.append(float(file.split('_')[1].split('-')[0]))
 
