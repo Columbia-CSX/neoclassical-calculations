@@ -13,6 +13,11 @@ main_dir = os.getcwd()
 os.system("python $UTILS_DIR/parseRadErScan.py")
 os.chdir("./raderscan/determineEr")
 os.system(f"python $UTILS_DIR/interpret.py --rootChoice {rootChoice}")
+user = None
+while not user in ["y", "n"]:
+    user = input("\n Check the Er value -- would you like to run sfincs at this Er? [y/n]")
+if user == "n":
+    raise SystemExit
 os.chdir(main_dir)
 os.system("mkdir ambipolar")
 os.chdir("./ambipolar")

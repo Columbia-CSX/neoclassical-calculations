@@ -266,7 +266,7 @@ def make_qlcfs_file(lcfs=None):
     np.save("qlcfs.npy", np.array(valsafe([Q_N, Q_T])))
     print("qlcfs.npy saved.")
 
-def makeCSXSurface(folder, colorparam=None, savematlab=True):
+def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultplotname"):
     psi_N = parseHDF5(folder, psiN).data
     thetas = parseHDF5(folder, theta).data
     zetas1 = parseHDF5(folder, zeta).data
@@ -279,13 +279,20 @@ def makeCSXSurface(folder, colorparam=None, savematlab=True):
     PSIN = np.ones_like(ZETA)*psi_N
 
     if colorparam is not None:
-        c = valsafe(parseHDF5(folder, colorparam).data)
-        c = np.vstack((c, c))
+        if isinstance(colorparam, Parameter):
+            c = valsafe(parseHDF5(folder, colorparam).data)
+            c = np.vstack((c, c))
+            plotlabel = colorparam.name
+        else:
+            c = valsafe(colorparam)
+            plotlabel = plotname.replace(" ", "")
+            plotlabel = plotlabel.replace("[","")
+            plotlabel = plotlabel.replace("]", "")
+            plotlabel = plotlabel.replace("/", "_")
         c_h = np.atleast_2d(c[:, 0]).T
         c = np.hstack((c, c_h))
         c_v = np.atleast_2d(c[0, :])
         C = np.vstack((c, c_v))
-        plotlabel = colorparam.name
         
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETA, ZETA)
@@ -297,8 +304,9 @@ def makeCSXSurface(folder, colorparam=None, savematlab=True):
         C = X #just to give it some color
         plotlabel = "X"
     if savematlab is True:
+        print(os.getcwd())
         mdic = {"X": X, "Y": Y, "Z": Z, "C": C}
-        savemat(f"./csxSurface_{folder}_{plotlabel}.mat", mdic)
+        savemat(f"./plots/csxSurface_{folder}_{plotlabel}.mat", mdic)
 
 def makePeriodic(thetas, zetas, paramdata):
     thetas = np.append(thetas, 2*np.pi)
@@ -493,7 +501,6 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
     
-
     if plot is True:
         # gets magnitude
         ll = label_for_plot
@@ -520,7 +527,8 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         cbar.ax.tick_params(labelsize=16)
         cbar.set_label(label, size=22)
         fig.tight_layout()
-        fig.savefig(f"./plots/fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+        fig.savefig(f"./plots/{folder}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+        makeCSXSurface(folder, colorparam=modv, plotname=label)
 
     return v_theta, v_zeta
 
@@ -567,7 +575,31 @@ def getRadialCurrent(folder):
     radial_current = fsaj*vprime
     radial_current.to(u.A)
     return radial_current
+
+def fluxSurfaceAverageOfArray(folder, ARRAY):
+    thetas = parseHDF5(folder, theta).data
+    zetas = parseHDF5(folder, zeta).data
+    zetas = np.concatenate(zetas, zetas+np.pi)
+
+    assert ARRAY.shape == (len(zetas), len(thetas))
     
+    modB = valsafe(parseHDF5(folder, B).data)
+    modB2 = np.vstack((modB, modB))**2
+
+    Gval = valsafe(parseHDF5(folder, G).data)
+    Ival = valsafe(parseHDF5(folder, I).data)
+    iotaval = valsafe(parseHDF5(folder, iota).data)
+    vprime = valsafe(parseHDF5(folder, VPrime).data)
+
+    dtheta = thetas[1]-thetas[0]
+    dzeta = zetas[1]-zetas[0]
+
+    sqrtg = (Gval+iotaval*Ival)/modB2
+    integrand = sqrtg*ARRAY
+    integral = dtheta*dzeta*np.sum(integrand)
+
+    return integral/vprime
+
 
 if __name__ == "__main__":
 
@@ -577,15 +609,18 @@ if __name__ == "__main__":
 
     # makeStreamPlot("rN_0.95", vPar_e)
     # makeStreamPlot("rN_0.95", vPar_i)
+
     make_qlcfs_file()
-    getRadialCurrent("rN_0.95")
-    getFullV("rN_0.95", omitPerp=True, plot=True)
-    getFullV("rN_0.95", omitPar=True, plot=True)
-    getFullV("rN_0.95", plot=True, speciesIndex=0)
-    getFullV("rN_0.95", plot=True, speciesIndex=1)
-    getFullV("rN_0.95", omitPerp=True, plot=True, speciesIndex=1)
-    getFullV("rN_0.95", omitPar=True, plot=True, speciesIndex=1)
-    getAngularMomentumDensity("rN_0.95")
+    for radius in [file for file in os.listdir() if file.startswith("rN")]:
+        print(f"Analyzing file {radius}...")
+        getRadialCurrent(radius)
+        getFullV(radius, omitPerp=True, plot=True)
+        getFullV(radius, omitPar=True, plot=True)
+        getFullV(radius, plot=True, speciesIndex=0)
+        getFullV(radius, plot=True, speciesIndex=1)
+        getFullV(radius, omitPerp=True, plot=True, speciesIndex=1)
+        getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
+        getAngularMomentumDensity(radius)
 
 """
 folder = "rN_0.95"

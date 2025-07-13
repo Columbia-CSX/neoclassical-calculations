@@ -32,12 +32,33 @@ for folder in tqdm(rN_folders, disable=disabletqdm, desc="Parsing data from radi
     Ers = []
     Irs = []
     for file in Er_folders:
-        Ers.append(valsafe(parseHDF5(file, Er).data))
-        Irs.append(valsafe(getRadialCurrent(file)))
+        if not os.path.exists(f"{file}/sfincsOutput.h5"):
+            print("sfincs run {folder} {file} seems to have failed.")
+            continue
+        er = valsafe(parseHDF5(file, Er).data)
+        Ir = valsafe(getRadialCurrent(file))
+        if Ir != 0.0:
+            Ers.append(er)
+            Irs.append(Ir)
     os.chdir("..")
     Ers, Irs = zip(*sorted(zip(Ers, Irs), key=lambda pair: pair[0]))
     Ers = list(Ers)
     Irs = list(Irs)
     np.savetxt(f"./determineEr/raderscan-{folder}-Ir-vs-Er.dat", np.array([Ers, Irs]).T)
+    
+    #plotting the output
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    Irs_plus = np.ma.masked_less_equal(Irs, 0)
+    Irs_minus = np.ma.masked_greater(Irs, 0)
+    ax.plot(Ers, Irs_plus, marker='o', color='red', label='+')
+    ax.plot(Ers, Irs_minus, marker='o', color='blue', label='-')
+    ax.set_xlabel("$E_r$ [V/m]")
+    ax.set_ylabel("$I_r$ [A]")
+    ax.set_title(f"{folder}")
+    fig.legend()
+    fig.show()
+    fig.savefig(f"./determineEr/raderscan-{folder}-Ir-vs-Er.jpeg")
 
 print(f"Data from radius and Er scan stored in:\n\t{os.getcwd()}/determineEr.")
+
