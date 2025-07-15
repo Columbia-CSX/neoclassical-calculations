@@ -498,6 +498,11 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         scalePar = 0.0
         label_for_plot[1] = " perpendicular "
 
+    print("VPAR THETA", vPar_theta)
+    print("VPAR ZETA", vPar_zeta)
+    print("VPERP THETA", vPerp_theta)
+    print("VPERP ZETA", vPerp_zeta)
+
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
     
@@ -513,6 +518,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
         dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
         modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
+        print("MOD V", modv)
+        print("DOTPRODUCT", dotproduct)
+        print("MOD DR DZETA", moddrdzeta)
+        print("MOD DR DTHETA", moddrdzeta)
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
         tickpositions = [0, np.pi]
@@ -522,8 +531,11 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         ax.set_xticks(tickpositions, ticklabels, fontsize=16)
         ax.set_yticks(tickpositions, ticklabels, fontsize=16)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
-        strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
-        cbar = fig.colorbar(strm.lines)
+        print("LINEWIDTH", lw)
+        #strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
+        quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
+        #cbar = fig.colorbar(strm.lines)
+        cbar = fig.colorbar(quiv)
         cbar.ax.tick_params(labelsize=16)
         cbar.set_label(label, size=22)
         fig.tight_layout()
@@ -611,14 +623,14 @@ if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_i)
 
     make_qlcfs_file()
-    for radius in [file for file in os.listdir() if file.startswith("rN")]:
+    for radius in [file for file in os.listdir() if file.startswith("rN_0.4")]:
         print(f"Analyzing file {radius}...")
         getRadialCurrent(radius)
-        getFullV(radius, omitPerp=True, plot=True)
+        #getFullV(radius, omitPerp=True, plot=True)
         getFullV(radius, omitPar=True, plot=True)
         getFullV(radius, plot=True, speciesIndex=0)
         getFullV(radius, plot=True, speciesIndex=1)
-        getFullV(radius, omitPerp=True, plot=True, speciesIndex=1)
+        #getFullV(radius, omitPerp=True, plot=True, speciesIndex=1)
         getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
         getAngularMomentumDensity(radius)
 
