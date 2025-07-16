@@ -515,19 +515,21 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
-    
+    bri = getBoozerRadialInterpolant(getPathToWout())
+    points = unrollMeshgrid(PSIN, THETAS, ZETAS)
+    moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
+    dotproduct = get_drdzeta_dot_drdtheta(bri, points)
+    moddrdtheta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)
+    moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+    dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+    modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
+
     if plot is True:
         # gets magnitude
         ll = label_for_plot
         label = ll[0]+ll[1]+ll[2]
         bri = getBoozerRadialInterpolant(getPathToWout())
         points = unrollMeshgrid(PSIN, THETAS, ZETAS)
-        moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
-        dotproduct = get_drdzeta_dot_drdtheta(bri, points)
-        moddrdtheta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)
-        moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
-        dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
-        modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
         tickpositions = [0, np.pi]
@@ -547,7 +549,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         fig.savefig(f"./plots/{folder}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
         makeCSXSurface(folder, colorparam=modv, plotname=label)
 
-    return v_theta, v_zeta
+    return v_theta, v_zeta, modv
 
 def getAngularMomentumDensity(folder, speciesIndex=0):
     
@@ -616,6 +618,8 @@ def fluxSurfaceAverageOfArray(folder, ARRAY):
     integral = dtheta*dzeta*np.sum(integrand)
 
     return integral/vprime
+
+
 
 
 if __name__ == "__main__":
