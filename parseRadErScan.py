@@ -31,15 +31,37 @@ for folder in tqdm(rN_folders, disable=disabletqdm, desc="Parsing data from radi
     Er_folders = [file for file in os.listdir() if file.startswith("Er")]
     Ers = []
     Irs = []
+    failed = []
+    zeroes = []
     for file in Er_folders:
         if not os.path.exists(f"{file}/sfincsOutput.h5"):
-            print("sfincs run {folder} {file} seems to have failed.")
+            print(f"sfincs run {folder} {file} seems to have failed.")
+            failed.append(file)
             continue
-        er = valsafe(parseHDF5(file, Er).data)
-        Ir = valsafe(getRadialCurrent(file))
+        try:
+            er = valsafe(parseHDF5(file, Er).data)
+            Ir = valsafe(getRadialCurrent(file))
+        except:
+            failed.append(file)
+            continue
         if Ir != 0.0:
             Ers.append(er)
             Irs.append(Ir)
+        else:
+            zeroes.append(file)
+    if len(failed)>0:
+        print(f"Accessing sfincs parameters failed for the following files in {folder}.")
+        print("This likely indicates a failed or incomplete sfincs run:")
+        print(failed)
+    if len(zeroes)>0:
+        print(f"sfincs calculated a 0 radial current for the following files in {folder}.")
+        print("This indicates a completed but unphysical sfincs result:")
+        print(zeroes)
+    if len(Er_folders) == len(failed) + len(zeroes):
+        print(f"All calculations on {folder} failed.")
+        # raise ValueError("All calculations on a flux surface failed")
+        os.chdir("..")
+        continue
     os.chdir("..")
     Ers, Irs = zip(*sorted(zip(Ers, Irs), key=lambda pair: pair[0]))
     Ers = list(Ers)

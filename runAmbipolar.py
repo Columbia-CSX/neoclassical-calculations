@@ -10,6 +10,8 @@ rootChoice = parser.parse_args().rootChoice
 to be run after running runRadErScan.py (in the same configuration directory)
 """
 main_dir = os.getcwd()
+print(f"~~ runAmbipolar.py starting in the following directory ~~")
+print(f"\t {main_dir}")
 os.system("python $UTILS_DIR/parseRadErScan.py")
 os.chdir("./raderscan/determineEr")
 os.system(f"python $UTILS_DIR/interpret.py --rootChoice {rootChoice}")

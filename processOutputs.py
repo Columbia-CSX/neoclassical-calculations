@@ -479,8 +479,18 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
 
     n_array = parseHDF5(folder, n).data
     n_array = np.vstack((n_array, n_array))
+
+    print("n_array", n_array)
+    print("Tval", Tval)
+    print("dn_dpsi", dn_dpsi)
+    print("dT_dpsi", dT_dpsi)
+    print("dPhi_dpsi", dPhi_dpsi.to(u.V/(u.T*u.m*u.m)))
     
     w = dPhi_dpsi + (1/ (Z * e * n_array))*(n_array*dT_dpsi + Tval*dn_dpsi)
+
+    print("w", w)
+    print("first component", ((1/ (Z * e * n_array))*(n_array*dT_dpsi)).to(u.V/(u.T*u.m*u.m)))
+    print("second component", ((1/ (Z * e * n_array))*(Tval*dn_dpsi)).to(u.V/(u.T*u.m*u.m)))
     
     # combining the scale factor with the directional arrays
 
@@ -498,10 +508,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         scalePar = 0.0
         label_for_plot[1] = " perpendicular "
 
-    print("VPAR THETA", vPar_theta)
-    print("VPAR ZETA", vPar_zeta)
-    print("VPERP THETA", vPerp_theta)
-    print("VPERP ZETA", vPerp_zeta)
+    #print("VPAR THETA", vPar_theta)
+    #print("VPAR ZETA", vPar_zeta)
+    #print("VPERP THETA", vPerp_theta)
+    #print("VPERP ZETA", vPerp_zeta)
 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
@@ -518,10 +528,6 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
         dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
         modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
-        print("MOD V", modv)
-        print("DOTPRODUCT", dotproduct)
-        print("MOD DR DZETA", moddrdzeta)
-        print("MOD DR DTHETA", moddrdzeta)
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
         tickpositions = [0, np.pi]
@@ -531,11 +537,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         ax.set_xticks(tickpositions, ticklabels, fontsize=16)
         ax.set_yticks(tickpositions, ticklabels, fontsize=16)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
-        print("LINEWIDTH", lw)
-        #strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
-        quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
-        #cbar = fig.colorbar(strm.lines)
-        cbar = fig.colorbar(quiv)
+        strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
+        #quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
+        cbar = fig.colorbar(strm.lines)
+        #cbar = fig.colorbar(quiv)
         cbar.ax.tick_params(labelsize=16)
         cbar.set_label(label, size=22)
         fig.tight_layout()
@@ -579,7 +584,7 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     print(AngularMomentumField)
 
 def getRadialCurrent(folder):
-    # FSA < J dot \nabla \psi > = fsaj
+    # FSA < J dot \nabla \psi > = fsa
     eFlux = parseHDF5(folder, eFlux_vm_psi).data
     iFlux = parseHDF5(folder, iFlux_vm_psi).data
     vprime = parseHDF5(folder, VPrime).data
@@ -623,16 +628,16 @@ if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_i)
 
     make_qlcfs_file()
-    for radius in [file for file in os.listdir() if file.startswith("rN_0.4")]:
+    for radius in [file for file in os.listdir() if file.startswith("rN_0.15")]:
         print(f"Analyzing file {radius}...")
         getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
-        getFullV(radius, omitPar=True, plot=True)
+        #getFullV(radius, omitPar=True, plot=True)
         getFullV(radius, plot=True, speciesIndex=0)
         getFullV(radius, plot=True, speciesIndex=1)
         #getFullV(radius, omitPerp=True, plot=True, speciesIndex=1)
-        getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
-        getAngularMomentumDensity(radius)
+        #getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
+        #getAngularMomentumDensity(radius)
 
 """
 folder = "rN_0.95"

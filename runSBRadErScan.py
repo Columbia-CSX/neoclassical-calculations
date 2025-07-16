@@ -27,7 +27,8 @@ esbs = np.linspace(0.0, 1.0, NSB+1)
 
 for esb in esbs:
     print(f"### Setting up scan over radius and Er for esb = {esb}... ###")
-    os.mkdir(f"esb_{esb}")
+    if not os.path.exists(f"./esb_{esb}"):
+        os.mkdir(f"esb_{esb}")
     os.chdir(f"./esb_{esb}")
     os.system(f"python $UTILS_DIR/runRadErScan.py --equilibrium {eq} --profile {profile} --numRad {numRad} --rN_min {rN_min} --rN_max {rN_max} --NErs {NErs} --ErRange {ErRange} --SB")
     os.chdir(f"./raderscan")
