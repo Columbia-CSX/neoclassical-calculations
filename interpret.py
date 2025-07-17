@@ -8,12 +8,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description="process input tags")
 parser.add_argument('--rootChoice', type=str, required=True, help='low middle or high, which root to use (if only two, use low or middle for electron root)')
-parser.add_argument('--rootChoice', type=float, default=None, help='radial current to enforce in Amperes')
+parser.add_argument('--Ir', type=float, default=0.0, help='radial current to enforce, in Amperes')
 
 rootChoice = parser.parse_args().rootChoice
 Ir = parser.parse_args().Ir
-if Ir is None:
-    Ir = 0.0
 
 print("~~~ Interpretting results from runRadErScan ~~~")
 files = os.listdir('./')
@@ -67,7 +65,7 @@ def zeroCrossings(x, y):
 
 def get_Er(data, rootChoice, zeroJrThreshold=1e-4, differentErThreshold=5.0, ErRange=99):
     assert rootChoice in ['low', 'middle', 'high']
-    data = [data[0], np.array(data[1])-Ir)]
+    data = [data[0], np.array(data[1])-Ir]
     Jr = interp1d(data[0], data[1], kind='linear')
     Er_range = np.linspace(-ErRange, ErRange, 1000)
     Jrs = Jr(Er_range)

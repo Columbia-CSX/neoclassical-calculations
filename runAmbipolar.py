@@ -3,10 +3,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description="process input tags")
 parser.add_argument('--rootChoice', type=str, required=True, help='low middle or high, which root to use (if only two, use low or middle for electron root)')
-parser.add_argument('--Ir', type=float, default=None, help='radial current to enforce, in Amperes')
+parser.add_argument('--Ir', type=float, default=0.0, help='radial current to enforce, in Amperes')
 
 rootChoice = parser.parse_args().rootChoice
-Ir = parser.parse_ars().Ir
+Ir = parser.parse_args().Ir
 
 """
 to be run after running runRadErScan.py (in the same configuration directory)
@@ -23,9 +23,9 @@ while not user in ["y", "n"]:
 if user == "n":
     raise SystemExit
 os.chdir(main_dir)
-if Ir is None:
+if Ir == 0.0:
     new_dir_name = 'ambipolar'
-if Ir is not None:
+if Ir != 0.0:
     new_dir_name = f'Ir_{Ir}'
 os.system(f"mkdir {new_dir_name}")
 os.chdir(f"./{new_dir_name}")
