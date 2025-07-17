@@ -619,7 +619,44 @@ def fluxSurfaceAverageOfArray(folder, ARRAY):
 
     return integral/vprime
 
+def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
+    dirfiles = os.listdir()
+    radialCoords = []
+    vals = []
+    for file in dirfiles:
+        if not file.startswith("rN"):
+            continue
+        radialCoords.append(parseHDF5(file, radialCoordinate).data)
+        v_theta, v_zeta, modv = getFullV(file, speciesIndex=speciesIndex, omitPar=omitPar, omitPerp=omitPerp, plot=plot)
+        v = fluxSurfaceAverageOfArray(file, modv)
+        vals.append(v)
 
+    if sort:
+        radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+        radialCoords = list(radialCoords)
+        vals = list(vals)
+    
+    ylabel = ""
+    species = ["Electron ", "Ion "][speciesIndex]
+    ylabel = ylabel + species
+    if omitPar:
+        ylabel = ylabel + "perpendicular "
+    if omitPerp:
+        ylabel = ylabel + "parallel "
+    filename = ylabel + "flow velocity"
+    ylabel = filename + " [km/s]"
+
+    if plot:
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot()
+        ax.plot(valsafe(radialCoords), valsafe(vals), color='#012169', alpha=0.7)
+        ax.plot(valsafe(radialCoords), valsafe(vals), marker='o', linestyle='None', color='#012169')
+        ax.set_xlabel(radialCoordinate.label, fontsize=24)
+        ax.set_ylabel(ylabel, fontsize=24)
+        ax.tick_params(axis='both', labelsize=20)
+        fig.savefig(f"./plots/{filename}_vs_{radialCoordinate.name}.jpeg", dpi=320)
+
+    return radialCoords, vals
 
 
 if __name__ == "__main__":
