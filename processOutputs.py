@@ -17,11 +17,16 @@ try:
 except:
     parulacmap = "plasma"
 
+columbia = "#012169"
 """
 processes 'sfincsOutput.h5' files present in the directory.
 this script should be called from the directory containing the
 rN_0.xxxx directories (sfincsScan_4 run with adjustScript)
 """
+
+if not os.path.exists("./plots"):
+    os.system("mkdir plots")
+
 ### utility functions ###
 
 def index_along_dim(arr, dim, idx):
@@ -132,7 +137,7 @@ def valsafe(quantity):
 
 def parseHDF5(folder, parameter):
     f = h5py.File(f"./{folder}/sfincsOutput.h5", 'r')
-    assert parameter.name in list(f.keys()), "invalid sfincs parameter provided to parseHDF5"
+    assert parameter.name in list(f.keys()), f"invalid sfincs parameter {parameter.name} provided to parseHDF5\n if this is a valid parameter, this error indicates a failed sfincs run."
     paramDataset = f[parameter.name]
     parameter.data = paramDataset[()]*parameter.scaling
     return parameter.speciate()
@@ -265,6 +270,7 @@ def make_qlcfs_file(lcfs=None):
     print(f"  Turbulent heat flux (LCFS)----- {Q_T}")
     np.save("qlcfs.npy", np.array(valsafe([Q_N, Q_T])))
     print("qlcfs.npy saved.")
+    return Q_N, Q_T
 
 def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultplotname"):
     psi_N = parseHDF5(folder, psiN).data
@@ -546,7 +552,9 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
         cbar.ax.tick_params(labelsize=16)
         cbar.set_label(label, size=22)
         fig.tight_layout()
-        fig.savefig(f"./plots/{folder}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+        if not os.path.exists("./plots"):
+            os.system("mkdir plots")
+        fig.savefig(f"./plots/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
         makeCSXSurface(folder, colorparam=modv, plotname=label)
 
     return v_theta, v_zeta, modv
@@ -598,7 +606,7 @@ def getRadialCurrent(folder):
 def fluxSurfaceAverageOfArray(folder, ARRAY):
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
-    zetas = np.concatenate(zetas, zetas+np.pi)
+    zetas = np.concatenate((zetas, zetas+np.pi))
 
     assert ARRAY.shape == (len(zetas), len(thetas))
     
@@ -631,10 +639,9 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
         v = fluxSurfaceAverageOfArray(file, modv)
         vals.append(v)
 
-    if sort:
-        radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
-        radialCoords = list(radialCoords)
-        vals = list(vals)
+    radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+    radialCoords = list(radialCoords)
+    vals = list(vals)
     
     ylabel = ""
     species = ["Electron ", "Ion "][speciesIndex]
@@ -671,11 +678,11 @@ if __name__ == "__main__":
     make_qlcfs_file()
     for radius in [file for file in os.listdir() if file.startswith("rN_0.15")]:
         print(f"Analyzing file {radius}...")
-        getRadialCurrent(radius)
+        #getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
         #getFullV(radius, omitPar=True, plot=True)
-        getFullV(radius, plot=True, speciesIndex=0)
-        getFullV(radius, plot=True, speciesIndex=1)
+        #getFullV(radius, plot=True, speciesIndex=0)
+        #getFullV(radius, plot=True, speciesIndex=1)
         #getFullV(radius, omitPerp=True, plot=True, speciesIndex=1)
         #getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
         #getAngularMomentumDensity(radius)
