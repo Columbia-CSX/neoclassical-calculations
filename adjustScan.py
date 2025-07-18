@@ -32,5 +32,6 @@ for i in range(0, len(rN)):
     er = Er[i]
     new_dir_name = f"rN_{rN_wish:.4g}"
     edit_namelist(new_dir_name, rN_wish, er)
+    print(f"##### Run {new_dir_name} adjusted to Er = {er*1000} [V] #####")  
 
-print("All input files adjusted for Er")
+
