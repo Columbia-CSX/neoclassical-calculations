@@ -63,6 +63,7 @@ def getGradientMagnitudes(bri, points):
     dRdzeta = bri.dRdzeta()
     dnudtheta = bri.dnudtheta()
     dzetadtheta = bri.iota()**(-1)
+    dzetadtheta = 0
     dnudzeta = bri.dnudzeta()
     dZdtheta = bri.dZdtheta()
     dZdzeta = bri.dZdzeta()
@@ -77,6 +78,7 @@ def get_drdzeta_dot_drdtheta(bri, points):
     dRdzeta = bri.dRdzeta()
     dnudtheta = bri.dnudtheta()
     dzetadtheta = bri.iota()**(-1)
+    dzetadtheta = 0
     dnudzeta = bri.dnudzeta()
     dphidtheta = dzetadtheta - dnudtheta
     dphidzeta = 1.0 - dnudzeta

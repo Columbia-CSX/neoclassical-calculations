@@ -9,6 +9,7 @@ from simsopt.field.boozermagneticfield import BoozerRadialInterpolant
 from scipy.io import savemat
 from simsoptutils import *
 from scipy.fft import fft2, ifft2
+import pickle
 
 try:
     from nmmn.plots import parulacmap
@@ -119,6 +120,7 @@ dT_edpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar
 dT_idpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar * RBar), speciesIndex=1)
 eFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Electron radial flux $\langle \int d^3 v f_e \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=0)
 iFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Ion radial flux $\langle \int d^3 v f_i \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=1)
+totalHeatFlux_e = Parameter("heatFluxBeforeSurfaceIntegral_vm", r"Total heat flux", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex=0)
 
 def valsafe(quantity):
     try:
@@ -409,7 +411,13 @@ def makeQuiverPlotUnitB(folder):
     fig.show()
     fig.savefig("./plots/unitbquivC.jpeg")
 
-def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
+def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, forceRedo=False):
+    filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.pkl"
+    if os.path.exists(filename) and not forceRedo:
+        with open(filename, "rb") as f:
+            v_theta, v_zeta, modv = pickle.load(f)
+            return v_theta, v_zeta, modv
+
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas + np.pi))
@@ -521,6 +529,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
+
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETAS, ZETAS)
     moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
@@ -528,7 +537,32 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
     moddrdtheta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)
     moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
     dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+
     modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
+    vPar_dot_vPerp = vPar_theta*vPerp_theta*moddrdtheta*moddrdtheta
+    vPar_dot_vPerp += vPar_zeta*vPerp_zeta*moddrdzeta*moddrdzeta
+    vPar_dot_vPerp += (vPar_theta*vPerp_zeta + vPar_zeta*vPerp_theta)*dotproduct
+    #print("DOT PRODUCT VPAR DOT VPERP", vPar_dot_vPerp)
+    #print("average", np.mean(vPar_dot_vPerp))
+
+    # making sure that diamagnetic dir dot b dir = 0
+
+    bHat_dot_diamag = (iotaval/modB)*diamag_theta*moddrdtheta*moddrdtheta
+    #print(np.mean(bHat_dot_diamag))
+    bHat_dot_diamag += diamag_zeta*moddrdzeta*moddrdzeta
+    #print(np.mean(bHat_dot_diamag))
+    bHat_dot_diamag += ( (iotaval/modB)*diamag_zeta + diamag_theta)*dotproduct
+
+    #print("DOT PRODUCT BHAT DOT DIAMAG", bHat_dot_diamag)
+    #print("average", np.mean(bHat_dot_diamag))
+    
+    if not os.path.exists("flows"):
+        os.system("mkdir flows")
+
+    flows = (v_theta, v_zeta, modv)
+
+    with open(filename, 'wb') as f:
+        pickle.dump(flows, f)
 
     if plot is True:
         # gets magnitude
@@ -561,7 +595,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
 
 def getAngularMomentumDensity(folder, speciesIndex=0):
     
-    v_theta, v_zeta = getFullV(folder, speciesIndex=speciesIndex)
+    v_theta, v_zeta, modv = getFullV(folder, speciesIndex=speciesIndex)
 
     # need to multiply by mass density
 
@@ -591,7 +625,7 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
 
     AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
-    print(AngularMomentumField)
+    return AngularMomentumField
 
 def getRadialCurrent(folder):
     # FSA < J dot \nabla \psi > = fsa
@@ -603,7 +637,7 @@ def getRadialCurrent(folder):
     radial_current.to(u.A)
     return radial_current
 
-def fluxSurfaceAverageOfArray(folder, ARRAY):
+def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False):
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas+np.pi))
@@ -622,8 +656,13 @@ def fluxSurfaceAverageOfArray(folder, ARRAY):
     dzeta = zetas[1]-zetas[0]
 
     sqrtg = (Gval+iotaval*Ival)/modB2
+    if justIntegral:
+        sqrtg = 1.0
     integrand = sqrtg*ARRAY
     integral = dtheta*dzeta*np.sum(integrand)
+
+    if justIntegral:
+        vprime = 1.0
 
     return integral/vprime
 
@@ -634,7 +673,7 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
     for file in dirfiles:
         if not file.startswith("rN"):
             continue
-        radialCoords.append(parseHDF5(file, radialCoordinate).data)
+        radialCoords.append(parseHDF5(file, rN).data)
         v_theta, v_zeta, modv = getFullV(file, speciesIndex=speciesIndex, omitPar=omitPar, omitPerp=omitPerp, plot=plot)
         v = fluxSurfaceAverageOfArray(file, modv)
         vals.append(v)
@@ -661,10 +700,140 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
         ax.set_xlabel(radialCoordinate.label, fontsize=24)
         ax.set_ylabel(ylabel, fontsize=24)
         ax.tick_params(axis='both', labelsize=20)
-        fig.savefig(f"./plots/{filename}_vs_{radialCoordinate.name}.jpeg", dpi=320)
+        fig.savefig(f"./plots/{filename}_vs_rN.jpeg", dpi=320)
 
     return radialCoords, vals
 
+def getFSAAngularMomentumDensity(folder, speciesIndex=0):
+    L_density = getAngularMomentumDensity(folder, speciesIndex=speciesIndex)
+    return fluxSurfaceAverageOfArray(folder, L_density).to(u.kg/u.m/u.s)
+
+def getFSAAngularMomentumDensityProfile(speciesIndex=0, plot=True):
+    dirfiles = os.listdir()
+    radialCoords = []
+    vals = []
+    for file in dirfiles:
+        if not file.startswith("rN"):
+            continue
+        radialCoords.append(parseHDF5(file, rN).data)
+        v = valsafe(getFSAAngularMomentumDensity(file, speciesIndex=speciesIndex))
+        vals.append(v)
+
+    radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+    radialCoords = list(radialCoords)
+    vals = list(vals)
+
+    ylabel = ""
+    species = ["Electron ", "Ion "][speciesIndex]
+    ylabel = ylabel + species
+    filename = ylabel + "angular momentum density"
+    ylabel = filename + r" [$\frac{\text{kg}}{\text{m}\cdot\text{s}}]"
+
+    if plot:
+        if not os.path.exists("./plots"):
+            os.system("mkdir plots")
+
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot()
+        ax.plot(valsafe(radialCoords), valsafe(vals), color='#012169', alpha=0.7)
+        ax.plot(valsafe(radialCoords), valsafe(vals), marker='o', linestyle='None', color='#012169')
+        ax.set_xlabel(radialCoordinate.label, fontsize=24)
+        ax.set_ylabel(ylabel, fontsize=24)
+        ax.tick_params(axis='both', labelsize=20)
+        fig.savefig(f"./plots/{filename}_vs_{radialCoordinate.name}.jpeg", dpi=320)
+    return radialCoords, vals
+
+def getNTVTorque(folder, speciesIndex=0):
+    eFlux = parseHDF5(folder, eFlux_vm_psi).data
+    iFlux = parseHDF5(folder, iFlux_vm_psi).data
+    fsaj = e*iFlux - e*eFlux
+    iotaVal = parseHDF5(folder, iota).data
+    NTV = iotaVal*fsaj
+    return NTV.to(u.kg/u.m/u.s/u.s)
+
+def getDeltaT(folder, speciesIndex=0):
+    try:
+        return ( getFSAAngularMomentumDensity(folder, speciesIndex=speciesIndex)/getNTVTorque(folder, speciesIndex=speciesIndex) ).to(u.us)
+    except AssertionError:
+        print(f"Skipping Delta T calculation for {folder}")
+
+def getDeltaTProfile(speciesIndex=0, plot=True):
+    dirfiles = os.listdir()
+    radialCoords = []
+    vals = []
+    for file in dirfiles:
+        if not file.startswith("rN"):
+            continue
+        radialCoords.append(parseHDF5(file, rN).data)
+        v = valsafe(getDeltaT(file, speciesIndex=speciesIndex))
+        vals.append(v)
+
+    radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+    radialCoords = list(radialCoords)
+    vals = list(vals)
+
+    ylabel = ""
+    species = ["Electron ", "Ion "][speciesIndex]
+    ylabel = ylabel + species
+    filename = ylabel + r"Delta t"
+    ylabel =  r"$\Delta t$ [s]"
+
+    if plot:
+        if not os.path.exists("./plots"):
+            os.system("mkdir plots")
+
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot()
+        ax.plot(valsafe(radialCoords), valsafe(vals), color='#012169', alpha=0.7)
+        ax.plot(valsafe(radialCoords), valsafe(vals), marker='o', linestyle='None', color='#012169')
+        ax.set_xlabel(r"$\sqrt{\psi_N}$", fontsize=24)
+        ax.set_ylabel(ylabel, fontsize=24)
+        ax.tick_params(axis='both', labelsize=20)
+        fig.savefig(f"./plots/{filename}_vs_rN.jpeg", dpi=320)
+    return radialCoords, vals
+
+def getTotalHeatFlux(folder, speciesIndex=0):
+    # here "total" doesn't mean classical + neoclassical + turbulent
+    # it means just the neoclassical heat flux but not flux surface averaged
+    
+    if speciesIndex==0:
+        totalHeatFlux = totalHeatFlux_e
+    else:
+        totalHeatFlux = totalHeatFlux_i
+
+    thetas = parseHDF5(folder, theta).data
+    zetas = parseHDF5(folder, zeta).data
+    zetas = np.concatenate((zetas, zetas + np.pi))
+
+    heatFlux = valsafe(parseHDF5(folder, totalHeatFlux).data)
+    heatFlux = np.vstack((heatFlux, heatFlux))
+
+    print("flux surface averaged", fluxSurfaceAverageOfArray(folder, heatFlux, justIntegral=True))
+    print("from sficns", valsafe(parseHDF5(folder, heatFlux_vm_psi_e).data))
+
+def getNTVvsEr(folder):
+    # to be run in raderscan directory
+    # folder is some radius
+    main_dir = os.getcwd()
+    os.chdir(folder)
+
+    Ers = []
+    taus = []
+    Erfiles = [file for file in os.listdir() if file.startswith("Er")]
+    for file in Erfiles:
+        try:
+            er = valsafe(parseHDF5(f"{file}", Er).data)
+            tau = valsafe(getNTVTorque(f"{file}"))
+            Ers.append(er)
+            taus.append(tau)
+        except:
+            continue
+
+    Ers, taus = zip(*sorted(zip(Ers, taus), key=lambda pair: pair[0]))
+    Ers = list(Ers)
+    taus = list(taus)
+
+    return Ers, taus
 
 if __name__ == "__main__":
 
@@ -676,8 +845,9 @@ if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_i)
 
     make_qlcfs_file()
-    for radius in [file for file in os.listdir() if file.startswith("rN_0.15")]:
+    for radius in [file for file in os.listdir() if file.startswith("rN_0.75")]:
         print(f"Analyzing file {radius}...")
+        getFullV(radius)
         #getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
         #getFullV(radius, omitPar=True, plot=True)
