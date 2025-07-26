@@ -10,7 +10,9 @@ from scipy.io import savemat
 from simsoptutils import *
 from scipy.fft import fft2, ifft2
 import pickle
+import matplotlib.colors as color
 
+# uses the parula colormap if nmmn library is available (I like it)
 try:
     from nmmn.plots import parulacmap
     parula = parulacmap()
@@ -18,7 +20,9 @@ try:
 except:
     parulacmap = "plasma"
 
+# cu blue
 columbia = "#012169"
+
 """
 processes 'sfincsOutput.h5' files present in the directory.
 this script should be called from the directory containing the
@@ -38,9 +42,13 @@ def index_along_dim(arr, dim, idx):
 def getPathToWout():
     folders = os.listdir()
     main_dir = os.getcwd()
+
     for folder in folders:
-        if folder.startswith("rN"):
-            os.chdir(f"./{folder}")
+        if folder.startswith("rN") or folder == "input.namelist":
+            try:
+                os.chdir(f"./{folder}")
+            except:
+                pass
             with open(f"./input.namelist", "r") as f:
                 lines = f.readlines()
 
@@ -51,6 +59,12 @@ def getPathToWout():
                     os.chdir(main_dir)
                     return wout_file
 
+"""
+Each parameter of interest from sfincs is given a corresponding Parameter object.
+It stores information about what the name of the key for the parameter is in the HDF5
+file, what the .data of the parameter actually returns after processing, and the scaling 
+which is applied to the parameter as it is processed.
+"""
 class Parameter:
     def __init__(self, name, label, scaling=1.0, speciesIndex=None):
         self.name = name
@@ -137,7 +151,7 @@ def valsafe(quantity):
         except:
             return quantity
 
-def parseHDF5(folder, parameter):
+def parseHDF5(folder, parameter, ignoreFileFalure=False):
     f = h5py.File(f"./{folder}/sfincsOutput.h5", 'r')
     assert parameter.name in list(f.keys()), f"invalid sfincs parameter {parameter.name} provided to parseHDF5\n if this is a valid parameter, this error indicates a failed sfincs run."
     paramDataset = f[parameter.name]
@@ -415,8 +429,13 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.pkl"
     if os.path.exists(filename) and not forceRedo:
         with open(filename, "rb") as f:
-            v_theta, v_zeta, modv = pickle.load(f)
-            return v_theta, v_zeta, modv
+            try:
+                v_theta, v_zeta, modv, _, __, ___ = pickle.load(f)
+                return v_theta, v_zeta, modv
+            except:
+                print("Unable to recover flow data from the following file:")
+                print("\t"+f"{filename}")
+                print("(Re)calculating flow data...")
 
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
@@ -494,17 +513,17 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     n_array = parseHDF5(folder, n).data
     n_array = np.vstack((n_array, n_array))
 
-    print("n_array", n_array)
-    print("Tval", Tval)
-    print("dn_dpsi", dn_dpsi)
-    print("dT_dpsi", dT_dpsi)
-    print("dPhi_dpsi", dPhi_dpsi.to(u.V/(u.T*u.m*u.m)))
+    #print("n_array", n_array)
+    #print("Tval", Tval)
+    #print("dn_dpsi", dn_dpsi)
+    #print("dT_dpsi", dT_dpsi)
+    #print("dPhi_dpsi", dPhi_dpsi.to(u.V/(u.T*u.m*u.m)))
     
     w = dPhi_dpsi + (1/ (Z * e * n_array))*(n_array*dT_dpsi + Tval*dn_dpsi)
 
-    print("w", w)
-    print("first component", ((1/ (Z * e * n_array))*(n_array*dT_dpsi)).to(u.V/(u.T*u.m*u.m)))
-    print("second component", ((1/ (Z * e * n_array))*(Tval*dn_dpsi)).to(u.V/(u.T*u.m*u.m)))
+    #print("w", w)
+    #print("first component", ((1/ (Z * e * n_array))*(n_array*dT_dpsi)).to(u.V/(u.T*u.m*u.m)))
+    #print("second component", ((1/ (Z * e * n_array))*(Tval*dn_dpsi)).to(u.V/(u.T*u.m*u.m)))
     
     # combining the scale factor with the directional arrays
 
@@ -529,7 +548,9 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
-
+    
+    print("BRI Checkpoint")
+    print(getPathToWout())
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETAS, ZETAS)
     moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
@@ -559,7 +580,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     if not os.path.exists("flows"):
         os.system("mkdir flows")
 
-    flows = (v_theta, v_zeta, modv)
+    flows = (v_theta, v_zeta, modv, moddrdtheta, moddrdzeta, dotproduct)
 
     with open(filename, 'wb') as f:
         pickle.dump(flows, f)
@@ -591,6 +612,24 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         fig.savefig(f"./plots/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
         makeCSXSurface(folder, colorparam=modv, plotname=label)
 
+        # makes plot of 1 >> | \iota + Gw/vB | criterion
+
+        fig = plt.figure(figsize=(12, 7))
+        ax = fig.add_subplot()
+        tickpositions = [0, np.pi]
+        ticklabels = ["0", "$\pi$"]
+        ax.set_xlabel(r"$\zeta$", fontsize=22)
+        ax.set_ylabel(r"$\theta$", fontsize=22)
+        ax.set_xticks(tickpositions, ticklabels, fontsize=16)
+        ax.set_yticks(tickpositions, ticklabels, fontsize=16)
+        criterion = valsafe(iotaval) + valsafe((G_array*w)/(vPar*modB))
+        criterion = abs(valsafe(criterion))
+        cont = ax.contourf(ZETAS, THETAS, criterion, levels=50, cmap=parula, norm=color.LogNorm(vmin=criterion.min(), vmax=criterion.max()))
+        cbar = fig.colorbar(cont)
+        cbar.ax.set_ylabel(r"$|\iota + \frac{Gw}{v_{||}B}|$")
+        fig.tight_layout()
+        fig.savefig(f"./plots/{folder.replace('.', '_')}_criterion_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+
     return v_theta, v_zeta, modv
 
 def getAngularMomentumDensity(folder, speciesIndex=0):
@@ -614,15 +653,22 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
         n = n_i
         m = 4.6518341428e-26*u.kg
 
+    filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_False_par_False.pkl"
+
     mass_dens = m*parseHDF5(folder, n).data
     mass_dens = np.vstack((valsafe(mass_dens), valsafe(mass_dens)))*mass_dens.unit
-    
-    points = np.ascontiguousarray(unrollMeshgrid(PSIN, THETAS, ZETAS), dtype=np.float64)
-    bri = getBoozerRadialInterpolant(getPathToWout())
-    _, moddrdzeta = getGradientMagnitudes(bri, points)
-    dotproduct = get_drdzeta_dot_drdtheta(bri, points)
-    dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
-    moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+
+    if os.path.exists(filename):
+        with open(filename, "rb") as f:
+            _, __, ___, moddrdtheta, moddrdzeta, dotproduct = pickle.load(f)
+        print("Loaded pickle AMD")
+    else:
+        points = np.ascontiguousarray(unrollMeshgrid(PSIN, THETAS, ZETAS), dtype=np.float64)
+        bri = getBoozerRadialInterpolant(getPathToWout())
+        _, moddrdzeta = getGradientMagnitudes(bri, points)
+        dotproduct = get_drdzeta_dot_drdtheta(bri, points)
+        dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+        moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
 
     AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
     return AngularMomentumField
@@ -811,14 +857,15 @@ def getTotalHeatFlux(folder, speciesIndex=0):
     print("flux surface averaged", fluxSurfaceAverageOfArray(folder, heatFlux, justIntegral=True))
     print("from sficns", valsafe(parseHDF5(folder, heatFlux_vm_psi_e).data))
 
-def getNTVvsEr(folder):
+def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
     # to be run in raderscan directory
     # folder is some radius
     main_dir = os.getcwd()
     os.chdir(folder)
-
+    print(returnAMD)
     Ers = []
     taus = []
+    amds = []
     Erfiles = [file for file in os.listdir() if file.startswith("Er")]
     for file in Erfiles:
         try:
@@ -826,14 +873,28 @@ def getNTVvsEr(folder):
             tau = valsafe(getNTVTorque(f"{file}"))
             Ers.append(er)
             taus.append(tau)
+            if returnAMD:
+                amd = valsafe(getFSAAngularMomentumDensity(file, speciesIndex=speciesIndex))
+                amds.append(amd)
         except:
             continue
+    print(Ers)
+    print(taus)
+    print(amds)
+    print(os.getcwd())
+    if returnAMD:
+        ___, amds = zip(*sorted(zip(Ers, amds), key=lambda pair: pair[0]))
+        amds = list(amds)
 
     Ers, taus = zip(*sorted(zip(Ers, taus), key=lambda pair: pair[0]))
     Ers = list(Ers)
     taus = list(taus)
 
+    if returnAMD:
+        return Ers, taus, amds
+
     return Ers, taus
+
 
 if __name__ == "__main__":
 

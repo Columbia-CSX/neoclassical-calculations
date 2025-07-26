@@ -211,7 +211,6 @@ def plotNTVvsErAndEsb(rNfile="rN_0.75"):
             return 999.9
 
     esbfiles = sorted([file for file in os.listdir() if file.startswith("esb")], key=extract_esb)
-    
     fig = plt.figure(figsize=(12, 7))
     ax = fig.add_subplot()
     for esbfile in esbfiles:
@@ -228,18 +227,52 @@ def plotNTVvsErAndEsb(rNfile="rN_0.75"):
     fig.legend()
     fig.tight_layout()
     fig.savefig(f"plots/NTVvsErvsEsb_{rNfile}.jpeg", dpi=360)
-        
+
+def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0):
+    main_dir = os.getcwd()
+    def extract_esb(file):
+        try:
+            return float(file.split("_")[1])
+        except:
+            return 999.9
+    rNval = float(rNfile.split("_")[1])
+    esbfiles = sorted([file for file in os.listdir() if file.startswith("esb")], key=extract_esb)
+    print(esbfiles)
+    fig = plt.figure(figsize=(12, 7))
+    ax = fig.add_subplot()
+    for esbfile in esbfiles:
+        os.chdir(f"{esbfile}/ambipolar")
+        try:
+            amdambipolar = valsafe(getFSAAngularMomentumDensity(rNfile, speciesIndex=speciesIndex))
+        except:
+            os.chdir(main_dir)
+            continue
+        os.chdir(main_dir)
+        os.chdir(f"{esbfile}/raderscan")
+        Ers, taus, amd = getNTVvsEr(rNfile, returnAMD=True, speciesIndex=speciesIndex)
+        DeltaTs = []
+        for i in range(len(Ers)):
+            DeltaTs.append((amd[i]-amdambipolar)/taus[i])
+        esb = extract_esb(esbfile)
+        ax.plot(Ers, DeltaTs, label=r"$\epsilon_{sb} = $"+f"{esb:.3f}")
+        os.chdir(main_dir)
+    print("plotss")
+    ax.set_xlabel("$E_r$ [V]", fontsize=22)
+    ax.set_ylabel(r"$t_{fd}$ [s]", fontsize=22)
+    ax.set_yscale('log')
+    ax.set_title(r"$\sqrt{\psi_N}$ ="+f"{rNval}", fontsize=22)
+    ax.tick_params(axis="both", labelsize=18)
+    fig.legend()
+    fig.tight_layout()
+    fig.savefig(f"plots/DeltaTvsErvsEsb_{speciesIndex}_{rNfile}.jpeg", dpi=360)
+
 if __name__ == "__main__":
     """
     plotVvsesb()
     plotVvsesb(speciesIndex=1)
-    
     plotVvsesb(speciesIndex=0, omitPar=True)
     plotVvsesb(speciesIndex=1, omitPar=True)
     plotVvsesb(speciesIndex=0, omitPerp=True)
     plotVvsesb(speciesIndex=1, omitPerp=True)
     """
-    plotHeat()
-    plotNTVvsErAndEsb()
-    #plot_DeltaT_vs_rN_and_esb()
-
+    plotDeltaTvsErAndEsb(rNfile="rN_0.35")
