@@ -1,4 +1,5 @@
 from processOutputs import *
+from tqdm import tqdm
 
 """
 meant to be called from the same folder runSBRadErScan.py was called in,
@@ -228,7 +229,11 @@ def plotNTVvsErAndEsb(rNfile="rN_0.75"):
     fig.tight_layout()
     fig.savefig(f"plots/NTVvsErvsEsb_{rNfile}.jpeg", dpi=360)
 
-def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0):
+def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False):
+    """
+    spinUp == True   : \Delta t = l - l_ambipolar / tau
+    spinUp == False  : \Delta t = l_ambipolar - l / tau_ambipolar	
+    """
     main_dir = os.getcwd()
     def extract_esb(file):
         try:
@@ -237,13 +242,13 @@ def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0):
             return 999.9
     rNval = float(rNfile.split("_")[1])
     esbfiles = sorted([file for file in os.listdir() if file.startswith("esb")], key=extract_esb)
-    print(esbfiles)
     fig = plt.figure(figsize=(12, 7))
     ax = fig.add_subplot()
-    for esbfile in esbfiles:
+    for esbfile in tqdm(esbfiles, desc=f"Processing time scale at {rNfile}..."):
         os.chdir(f"{esbfile}/ambipolar")
         try:
             amdambipolar = valsafe(getFSAAngularMomentumDensity(rNfile, speciesIndex=speciesIndex))
+            tauambipolar = valsafe(getNTVTorque(rNfile))
         except:
             os.chdir(main_dir)
             continue
@@ -251,20 +256,25 @@ def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0):
         os.chdir(f"{esbfile}/raderscan")
         Ers, taus, amd = getNTVvsEr(rNfile, returnAMD=True, speciesIndex=speciesIndex)
         DeltaTs = []
-        for i in range(len(Ers)):
-            DeltaTs.append((amd[i]-amdambipolar)/taus[i])
+        if spinUp:
+            for i in range(len(Ers)):
+                DeltaTs.append(((amd[i]-amdambipolar)/taus[i]))
+        if not spinUp:
+            for i in range(len(Ers)):
+                DeltaTs.append(abs((amdambipolar - amd[i])/tauambipolar))
         esb = extract_esb(esbfile)
         ax.plot(Ers, DeltaTs, label=r"$\epsilon_{sb} = $"+f"{esb:.3f}")
         os.chdir(main_dir)
-    print("plotss")
+
+    extra_plot_label = ["Electron", "Ion"][speciesIndex] + " " + ["spin down", "spin up"][int(spinUp)] + " "
     ax.set_xlabel("$E_r$ [V]", fontsize=22)
-    ax.set_ylabel(r"$t_{fd}$ [s]", fontsize=22)
+    ax.set_ylabel(extra_plot_label + r"$t_{fd}$ [s]", fontsize=22)
     ax.set_yscale('log')
     ax.set_title(r"$\sqrt{\psi_N}$ ="+f"{rNval}", fontsize=22)
     ax.tick_params(axis="both", labelsize=18)
     fig.legend()
     fig.tight_layout()
-    fig.savefig(f"plots/DeltaTvsErvsEsb_{speciesIndex}_{rNfile}.jpeg", dpi=360)
+    fig.savefig(f"plots/DeltaTvsErvsEsb_{speciesIndex}_{rNfile}_{spinUp}.jpeg", dpi=360)
 
 if __name__ == "__main__":
     """
@@ -275,4 +285,12 @@ if __name__ == "__main__":
     plotVvsesb(speciesIndex=0, omitPerp=True)
     plotVvsesb(speciesIndex=1, omitPerp=True)
     """
-    plotDeltaTvsErAndEsb(rNfile="rN_0.35")
+    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1, spinUp=False)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1, spinUp=False)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1, spinUp=True)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1, spinUp=True)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=False)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=True)
+    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=True)
+

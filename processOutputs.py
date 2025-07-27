@@ -549,8 +549,6 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
     
-    print("BRI Checkpoint")
-    print(getPathToWout())
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETAS, ZETAS)
     moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
@@ -661,7 +659,6 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     if os.path.exists(filename):
         with open(filename, "rb") as f:
             _, __, ___, moddrdtheta, moddrdzeta, dotproduct = pickle.load(f)
-        print("Loaded pickle AMD")
     else:
         points = np.ascontiguousarray(unrollMeshgrid(PSIN, THETAS, ZETAS), dtype=np.float64)
         bri = getBoozerRadialInterpolant(getPathToWout())
@@ -862,26 +859,42 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
     # folder is some radius
     main_dir = os.getcwd()
     os.chdir(folder)
-    print(returnAMD)
     Ers = []
     taus = []
     amds = []
     Erfiles = [file for file in os.listdir() if file.startswith("Er")]
     for file in Erfiles:
+        erPass = False
+        tauPass = False
+        amdPass = False
         try:
             er = valsafe(parseHDF5(f"{file}", Er).data)
             tau = valsafe(getNTVTorque(f"{file}"))
             Ers.append(er)
+            erPass = True
             taus.append(tau)
+            tauPass = True
             if returnAMD:
                 amd = valsafe(getFSAAngularMomentumDensity(file, speciesIndex=speciesIndex))
                 amds.append(amd)
+                amdPass = True
+            else:
+                amdPass = True
         except:
-            continue
-    print(Ers)
-    print(taus)
-    print(amds)
-    print(os.getcwd())
+            pass
+        finally:
+            if erPass and tauPass and amdPass:
+                pass
+            else:
+                if not erPass:
+                    continue
+                if not tauPass:
+                    del Ers[-1]
+                    continue
+                if not amdPass:
+                    del Ers[-1]
+                    del taus[-1]
+                    continue
     if returnAMD:
         ___, amds = zip(*sorted(zip(Ers, amds), key=lambda pair: pair[0]))
         amds = list(amds)
