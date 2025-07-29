@@ -280,6 +280,8 @@ def make_qlcfs_file(lcfs=None):
     print("Making qlcfs.npy...")
     if lcfs is None:
         lcfs = getLCFS()
+        print(lcfs)
+    print(os.getcwd())
     Q_N = getNeoclassicalHeatFlux(lcfs)
     Q_T = getGyroBohmHeatFluxEstimate(lcfs)
     print(f"  Neoclassical heat flux (LCFS)-- {Q_N}")
@@ -326,7 +328,6 @@ def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultpl
         C = X #just to give it some color
         plotlabel = "X"
     if savematlab is True:
-        print(os.getcwd())
         mdic = {"X": X, "Y": Y, "Z": Z, "C": C}
         savemat(f"./plots/csxSurface_{folder}_{plotlabel}.mat", mdic)
 
@@ -835,24 +836,54 @@ def getDeltaTProfile(speciesIndex=0, plot=True):
         fig.savefig(f"./plots/{filename}_vs_rN.jpeg", dpi=320)
     return radialCoords, vals
 
-def getTotalHeatFlux(folder, speciesIndex=0):
+def getAreaOfFluxSurface(folder):
+    filename = f"./flows/{folder.replace('.', '_')}_fullV_0_perp_False_par_False.pkl"
+    if os.path.exists(filename):
+        with open(filename, "rb") as f:
+            _, __, ___, moddrdtheta, moddrdzeta, dotproduct = pickle.load(f)
+    else:
+        points = np.ascontiguousarray(unrollMeshgrid(PSIN, THETAS, ZETAS), dtype=np.float64)
+        bri = getBoozerRadialInterpolant(getPathToWout())
+        _, moddrdzeta = getGradientMagnitudes(bri, points)
+        dotproduct = get_drdzeta_dot_drdtheta(bri, points)
+        dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
+        moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
+    
+    E = moddrdtheta**2
+    G = moddrdzeta**2
+    F = dotproduct
+    detEFG = E*G-F*F
+    
+    return fluxSurfaceAverageOfArray(folder, np.sqrt(detEFG), justIntegral=True)*u.m*u.m
+
+def getTotalHeatFlux(folder):
     # here "total" doesn't mean classical + neoclassical + turbulent
     # it means just the neoclassical heat flux but not flux surface averaged
     
-    if speciesIndex==0:
-        totalHeatFlux = totalHeatFlux_e
-    else:
-        totalHeatFlux = totalHeatFlux_i
-
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas + np.pi))
 
-    heatFlux = valsafe(parseHDF5(folder, totalHeatFlux).data)
+    heatFlux = valsafe(parseHDF5(folder, totalHeatFlux_e).data+parseHDF5(folder, totalHeatFlux_i).data)
     heatFlux = np.vstack((heatFlux, heatFlux))
 
-    print("flux surface averaged", fluxSurfaceAverageOfArray(folder, heatFlux, justIntegral=True))
-    print("from sficns", valsafe(parseHDF5(folder, heatFlux_vm_psi_e).data))
+    Gval = valsafe(parseHDF5(folder, G).data)
+    vprime = valsafe(parseHDF5(folder, VPrime).data)
+
+    modB = valsafe(parseHDF5(folder, B).data)
+    modB = np.vstack((modB, modB))
+
+    sqrtg = Gval/(modB**2) # no need for \iota I term 
+
+    heatFlux = vprime*heatFlux/sqrtg
+    
+    # now to rescale the heatFlux so that it's in units of W/m^2 instead of T W /m
+    
+    heatFlux = heatFlux * vprime / valsafe(getAreaOfFluxSurface(folder))
+
+    makeCSXSurface(folder, heatFlux, True, "heatFlux")
+
+    return heatFlux
 
 def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
     # to be run in raderscan directory
@@ -922,6 +953,7 @@ if __name__ == "__main__":
     for radius in [file for file in os.listdir() if file.startswith("rN_0.75")]:
         print(f"Analyzing file {radius}...")
         getFullV(radius)
+        getTotalHeatFlux(radius)
         #getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
         #getFullV(radius, omitPar=True, plot=True)

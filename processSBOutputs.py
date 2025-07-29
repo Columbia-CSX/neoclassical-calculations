@@ -64,7 +64,7 @@ def plotHeat():
     for file in [file for file in os.listdir() if file.startswith("esb")]:
         if file == "esb_0.8":
             continue
-        # hardcoded fix to a failed file
+        # todo remove this two lines ^^ hardcoded fix for a failed file
         os.chdir(f"{file}/ambipolar")
         Q_N, Q_T = make_qlcfs_file()
         _, esb = file.split("_")
@@ -107,6 +107,8 @@ def plotHeat():
     ax.tick_params(axis="both", labelsize=19)
     fig.tight_layout()
     fig.savefig("./plots/Q_N_over_Q_T_vs_esb.jpeg", dpi=360)
+
+    return esbs, Q_Ns, Q_Ts
 
 def asNumber(string):
     try:
