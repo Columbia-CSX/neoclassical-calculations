@@ -8,7 +8,7 @@ parser.add_argument('--numRad', type=str, required=True, help='number of radii a
 parser.add_argument('--rN_min', type=str, required=True, help='innermost rN to perform calculation')
 parser.add_argument('--rN_max', type=str, required=True, help='outermost rN to perform calculation')
 parser.add_argument('--NErs', type=str, required=True, help='number of samples to scan between -ErRange and ErRange')
-parser.add_argument('--ErRange', type=str, required=True, help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V)')
+parser.add_argument('--ErRange', type=str, required=True, nargs="+", help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V) if ErRange is a number\nif instead a tuple is provided, ex. "ErMin ErMax" then the scan will happen between these values')
 parser.add_argument('--SB', action=argparse.BooleanOptionalAction)
 parser.set_defaults(SB=False)
 
@@ -18,11 +18,22 @@ numRad = parser.parse_args().numRad
 rN_min = parser.parse_args().rN_min
 rN_max = parser.parse_args().rN_max
 NErs = parser.parse_args().NErs
-ErRange = float(parser.parse_args().ErRange)
 SB = bool(parser.parse_args().SB)
 
 if int(NErs) % 2 == 0:
     NErs = str(int(NErs)+1)
+
+try:
+    ErRange = float(parser.parse_args().ErRange)
+    ErMax = ErRange
+    ErMin = -ErRange
+except:
+    try:
+        ErMin, ErMax = parser.parse_args().ErRange
+        ErMin = float(ErMin)
+        ErMax = float(ErMax)
+    except:
+        raise ValueError("Invalid input provided for ErRange")
 
 eqFile = "/global/homes/m/michaelc/stelloptPlusSfincs/equilibria/"+eq
 proFile = "/global/homes/m/michaelc/stelloptPlusSfincs/profiles/"+profile
@@ -34,8 +45,8 @@ with open(f"./sfincsScan_5", "r") as f:
 new_lines = []
 for line in lines:
     modified_line = line.replace(f"!ss NErs = 101", f"!ss NErs = {NErs}")
-    modified_line = modified_line.replace(f"!ss ErMax = 0.020", f"!ss ErMax = {ErRange/1000}")
-    modified_line = modified_line.replace(f"!ss ErMin = -0.020", f"!ss ErMin = {-ErRange/1000}")
+    modified_line = modified_line.replace(f"!ss ErMax = 0.020", f"!ss ErMax = {ErMax/1000}")
+    modified_line = modified_line.replace(f"!ss ErMin = -0.020", f"!ss ErMin = {ErMin/1000}")
     new_lines.append(modified_line)
 with open(f"./sfincsScan_5", "w") as f:
     f.writelines(new_lines)
@@ -43,7 +54,7 @@ os.chdir(main_dir)
 
 os.system("mkdir raderscan")
 os.chdir("./raderscan")
-os.system("python /global/homes/m/michaelc/stelloptPlusSfincs/stelloptPlusSfincs/run.py --profilesIn "+proFile+" --eqIn "+eqFile+" --radialVar 3 --Nzeta 27 --Ntheta 23 --Nxi 71 --driftScheme 0 --saveLoc "+os.getcwd()+" --time 00-0:20:00 --nNodes 1 --notifs all --noRun")
+os.system("python /global/homes/m/michaelc/stelloptPlusSfincs/stelloptPlusSfincs/run.py --profilesIn "+proFile+" --eqIn "+eqFile+" --radialVar 3 --Nzeta 27 --Ntheta 23 --Nxi 71 --driftScheme 2 --saveLoc "+os.getcwd()+" --time 00-0:20:00 --nNodes 1 --notifs all --noRun")
 
 with open(f"./input.namelist", "r") as f:
     lines = f.readlines()
@@ -68,8 +79,8 @@ if not SB:
     new_lines = []
     for line in lines:
         modified_line = line.replace(f"!ss NErs = {NErs}", f"!ss NErs = 101")
-        modified_line = modified_line.replace(f"!ss ErMax = {ErRange/1000}", f"!ss ErMax = 0.020")
-        modified_line = modified_line.replace(f"!ss ErMin = {-ErRange/1000}", f"!ss ErMin = -0.020")
+        modified_line = modified_line.replace(f"!ss ErMax = {ErMax/1000}", f"!ss ErMax = 0.020")
+        modified_line = modified_line.replace(f"!ss ErMin = {ErMin/1000}", f"!ss ErMin = -0.020")
         new_lines.append(modified_line)
     with open(f"./sfincsScan_5", "w") as f:
         f.writelines(new_lines)

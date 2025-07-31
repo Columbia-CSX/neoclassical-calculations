@@ -4,6 +4,9 @@ from processOutputs import make_qlcfs_file
 import matplotlib.pyplot as plt
 
 """
+not useful in general
+(hardcoded for something specific)
+
 call from the temptrials directory. parses the qlcfs files in the
 directories hardcoded into this file, and produces a plot of the neoclassical
 and turbulent heat fluxes for each of the configurations at the temperatures

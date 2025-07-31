@@ -9,7 +9,7 @@ parser.add_argument('--numRad', type=str, required=True, help='number of radii a
 parser.add_argument('--rN_min', type=str, required=True, help='innermost rN to perform calculation')
 parser.add_argument('--rN_max', type=str, required=True, help='outermost rN to perform calculation')
 parser.add_argument('--NErs', type=str, required=True, help='number of samples to scan between -ErRange and ErRange')
-parser.add_argument('--ErRange', type=str, required=True, help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V)')
+parser.add_argument('--ErRange', type=str, required=True, nargs="+", help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V)\nif instead of a single number, two are provided then they will be interpreted as "ErMin ErMax"')
 parser.add_argument('--NSB', type=str, required=True, help=r'number of values -1 for \epsilon_{sb}. Ex. "4" will result in values 0.0, 0.25, 0.5, 0.75, 1.0')
 
 eq = parser.parse_args().equilibrium
@@ -18,8 +18,11 @@ numRad = parser.parse_args().numRad
 rN_min = parser.parse_args().rN_min
 rN_max = parser.parse_args().rN_max
 NErs = parser.parse_args().NErs
-ErRange = float(parser.parse_args().ErRange)
+ErRange = parser.parse_args().ErRange
 NSB = int(parser.parse_args().NSB)
+
+if isinstance(ErRange, list):
+    ErRange = ErRange[0] + " " + ErRange[1]
 
 main_dir = os.getcwd()
 

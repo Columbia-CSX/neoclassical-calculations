@@ -2,6 +2,9 @@ from simsopt.field.boozermagneticfield import BoozerRadialInterpolant
 from simsopt.mhd.vmec import Vmec
 import numpy as np
 
+# hardcoded for CSX -- need for accurate calculation of metric tensor elements
+psi_LCFS = -0.004153280174337876 # T m^2
+
 def getBoozerRadialInterpolant(wout_file):
     return BoozerRadialInterpolant(Vmec(wout_file), 3, mpol=15, ntor=14)
 
@@ -85,6 +88,46 @@ def get_drdzeta_dot_drdtheta(bri, points):
     dZdtheta = bri.dZdtheta()
     dZdzeta = bri.dZdzeta()
     return np.squeeze(dRdtheta*dRdzeta + R*R*dphidtheta*dphidzeta + dZdtheta*dZdzeta)
+
+def get_drdpsi_dot_drdtheta(bri, points):
+    bri.set_points(points)
+    R = bri.R()
+    dRdtheta = bri.dRdtheta()
+    dRds = bri.dRds()
+    dnudtheta = bri.dnudtheta()
+    dnuds = bri.dnuds()
+    dphidtheta = -dnudtheta
+    dphids = -dnuds
+    dZdtheta = bri.dZdtheta()
+    dZds = bri.dZds()
+    return np.squeeze(dRdtheta*dRds + R*R*dphidtheta*dphids + dZdtheta*dZds)/psi_LCFS
+
+def get_drdpsi_dot_drdzeta(bri, points):
+    bri.set_points(points)
+    R = bri.R()
+    dRds = bri.dRds()
+    dRdzeta = bri.dRdzeta()
+    dnuds = bri.dnuds()
+    dnudzeta = bri.dnudzeta()
+    dphids = -dnuds
+    dphidzeta = 1.0 - dnudzeta
+    dZds = bri.dZds()
+    dZdzeta = bri.dZdzeta()
+    return np.squeeze(dRds*dRdzeta + R*R*dphids*dphidzeta + dZds*dZdzeta)/psi_LCFS
+
+def get_drdpsi_dot_drdpsi(bri, points):
+    bri.set_points(points)
+    R = bri.R()
+    dRds = bri.dRds()
+    dnuds = bri.dnuds()
+    dphids = -dnuds
+    dZds = bri.dZds()
+    return np.squeeze(dRds*dRds + R*R*dphids*dphids + dZds*dZds)/(psi_LCFS**2)
+
+def get_K(bri, points):
+    bri.set_points(points)
+    K = bri.K()
+    return np.squeeze(K)
 
 if __name__ == '__main__':
     bri = getBoozerRadialInterpolant("/global/homes/m/michaelc/stelloptPlusSfincs/equilibria/wout_csx_ls_4.5_0.5T.nc")

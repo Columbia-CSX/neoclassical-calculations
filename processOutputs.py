@@ -135,6 +135,7 @@ dT_idpsi = Parameter("dTHatdpsiHat", r"blah blah", scaling = TBar / (BBar * RBar
 eFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Electron radial flux $\langle \int d^3 v f_e \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=0)
 iFlux_vm_psi = Parameter("particleFlux_vm_psiHat", r"Ion radial flux $\langle \int d^3 v f_i \mathbf{v}\cdot \nabla\psi\rangle$ [T/ms]", scaling=nBar*vBar*RBar*BBar, speciesIndex=1)
 totalHeatFlux_e = Parameter("heatFluxBeforeSurfaceIntegral_vm", r"Total heat flux", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex=0)
+totalHeatFlux_i = Parameter("heatFluxBeforeSurfaceIntegral_vm", r"Total heat flux", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex=1)
 
 def valsafe(quantity):
     try:
@@ -290,7 +291,7 @@ def make_qlcfs_file(lcfs=None):
     print("qlcfs.npy saved.")
     return Q_N, Q_T
 
-def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultplotname"):
+def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultplotname", saveSurfaceMeshAsNpy=False):
     psi_N = parseHDF5(folder, psiN).data
     thetas = parseHDF5(folder, theta).data
     zetas1 = parseHDF5(folder, zeta).data
@@ -330,6 +331,8 @@ def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultpl
     if savematlab is True:
         mdic = {"X": X, "Y": Y, "Z": Z, "C": C}
         savemat(f"./plots/csxSurface_{folder}_{plotlabel}.mat", mdic)
+    if saveSurfaceMeshAsNpy:
+        np.save(f"./plots/csxSurfaceMesh_{folder.replace('.', '_')}.npy", np.array([X, Y, Z]))
 
 def makePeriodic(thetas, zetas, paramdata):
     thetas = np.append(thetas, 2*np.pi)
@@ -425,6 +428,77 @@ def makeQuiverPlotUnitB(folder):
     fig.colorbar(quiv)
     fig.show()
     fig.savefig("./plots/unitbquivC.jpeg")
+
+def getMetricTensor(folder, forceRedo=False):
+    filename = f"./flows/{folder.replace('.', '_')}_metricTensor.pkl"
+    if os.path.exists(filename) and not forceRedo:
+        with open(filename, "rb") as f:
+            try:
+                g = pickle.load(f)
+                return g
+            except:
+                print("Unable to recover metric tensor from the following file:")
+                print("\t"+f"{filename}")
+                print("(Re)calculating metric components...")
+
+    thetas = parseHDF5(folder, theta).data
+    zetas = parseHDF5(folder, zeta).data
+    zetas = np.concatenate((zetas, zetas + np.pi))
+    psi_N = parseHDF5(folder, psiN).data
+
+    THETAS, ZETAS = np.meshgrid(thetas, zetas)
+    PSIN = np.ones_like(ZETAS)*psi_N
+
+    bri = getBoozerRadialInterpolant(getPathToWout())
+    points = unrollMeshgrid(PSIN, THETAS, ZETAS)
+    moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
+    g_theta_zeta = get_drdzeta_dot_drdtheta(bri, points)
+    g_psiN_psiN = get_drdpsi_dot_drdpsi(bri, points)
+    g_psiN_theta = get_drdpsi_dot_drdtheta(bri, points)
+    g_psiN_zeta = get_drdpsi_dot_drdzeta(bri, points)
+
+    g_theta_theta = rollMeshgrid(len(zetas), len(thetas), moddrdtheta)**2
+    g_zeta_zeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)**2
+    g_theta_zeta = rollMeshgrid(len(zetas), len(thetas), g_theta_zeta)
+    g_psiN_theta = rollMeshgrid(len(zetas), len(thetas), g_psiN_theta)
+    g_psiN_zeta = rollMeshgrid(len(zetas), len(thetas), g_psiN_zeta)
+    g_psiN_psiN = rollMeshgrid(len(zetas), len(thetas), g_psiN_psiN)
+
+    row1 = np.array([g_psiN_psiN, g_psiN_theta, g_psiN_zeta])
+    row2 = np.array([g_psiN_theta, g_theta_theta, g_theta_zeta])
+    row3 = np.array([g_psiN_zeta, g_theta_zeta, g_zeta_zeta])
+
+    g = np.array([row1, row2, row3])
+    with open(filename, "wb") as f:
+        pickle.dump(g, f)
+
+    ## checking to see if sqrtg is sqrtg
+
+    sqrtg_from_tensor = np.sqrt(np.linalg.det(g.transpose(2, 3, 0, 1)))
+    
+    Gval = parseHDF5(folder, G).data
+    G_unit = Gval.unit
+    G_array = np.ones_like(ZETAS)*valsafe(Gval)
+
+    Ival = parseHDF5(folder, I).data
+    I_unit = Ival.unit
+    I_array = np.ones_like(ZETAS)*valsafe(Ival)
+
+    iotaval = parseHDF5(folder, iota).data
+
+    modB = parseHDF5(folder, B).data
+    modB_unit = modB.unit
+    modB = valsafe(modB)
+    modB = np.vstack((modB, modB))
+
+    sqrtg_from_sfincs = ( G_array + iotaval*I_array ) / modB**2
+
+    print("jacobian determinant comparison")
+    print(sqrtg_from_tensor)
+    print(sqrtg_from_sfincs)
+
+    return g
+
 
 def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, forceRedo=False):
     filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.pkl"
@@ -952,8 +1026,9 @@ if __name__ == "__main__":
     make_qlcfs_file()
     for radius in [file for file in os.listdir() if file.startswith("rN_0.75")]:
         print(f"Analyzing file {radius}...")
-        getFullV(radius)
-        getTotalHeatFlux(radius)
+        #getFullV(radius)
+        #getTotalHeatFlux(radius)
+        getMetricTensor(radius)
         #getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
         #getFullV(radius, omitPar=True, plot=True)
