@@ -1,3 +1,9 @@
+"""
+Helper script that gets called in runAmbipolar.py, used to adjust
+the sfincs input.namelist values during a scan of radius so that
+all runs are set to the ambipolar values found in interpret.py.
+Shouldn't really need to be run on its own.
+"""
 import os
 import numpy as np
 import time
@@ -26,7 +32,8 @@ def edit_namelist(new_dir_name, rN_wish, Er):
     with open(f"./{new_dir_name}/input.namelist", "w") as f:
         f.writelines(new_lines)
 
-
+# for each radius on which sfincs calculation will be performed,
+# sets the Er input.namelist to the ambipolar value
 for i in range(0, len(rN)):
     rN_wish = rN[i]
     er = Er[i]
