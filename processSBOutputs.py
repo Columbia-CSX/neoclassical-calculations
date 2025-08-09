@@ -9,6 +9,8 @@ contains plotting routines for comparing plasma parameters across different
 values of esb
 """
 
+colors = ["crimson", "darkorange", "goldenrod", "green", "#259B9A", columbia]
+
 if not os.path.exists("./plots"):
     os.system("mkdir plots")
 
@@ -84,7 +86,7 @@ def plotHeat():
     fig = plt.figure(figsize=(12, 7))
     ax = fig.add_subplot()
     ax.plot(esbs, Q_Ns, marker='o', color=columbia)
-    ax.set_xlabel("$\epsilon_{sb}$", fontsize=22)
+    ax.set_xlabel("$\epsilon_{sb}$", fontsize=28)
     ax.set_ylabel("Neoclassical power $Q_N$ [W]", fontsize=22)
     ax.tick_params(axis="both", labelsize=19)
 
@@ -214,24 +216,24 @@ def plotNTVvsErAndEsb(rNfile="rN_0.75"):
             return 999.9
 
     esbfiles = sorted([file for file in os.listdir() if file.startswith("esb")], key=extract_esb)
-    fig = plt.figure(figsize=(12, 7))
+    fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot()
-    for esbfile in esbfiles:
+    for i, esbfile in enumerate(esbfiles):
         os.chdir(f"{esbfile}/raderscan")
         Ers, taus = getNTVvsEr(rNfile)
         taus = [tau*1000 for tau in taus]
         esb = extract_esb(esbfile)
-        ax.plot(Ers, taus, label=r"$\epsilon_{sb} = $"+f"{esb:.3f}")
+        ax.plot(Ers, taus, label=f"{esb:.3f}", color=colors[i])
         os.chdir(main_dir)
 
-    ax.set_xlabel("$E_r$ [V]", fontsize=22)
-    ax.set_ylabel(r"$\tau_{NTV}$ [g$\text{m}^{-1}\text{s}^{-2}$]", fontsize=22)
+    ax.set_xlabel("$E_r$ [V/m]", fontsize=28)
+    ax.set_ylabel(r"$\langle\tau\rangle$ [g$\text{m}^{-1}\text{s}^{-2}$]", fontsize=28)
     ax.tick_params(axis="both", labelsize=18)
-    fig.legend()
+    ax.legend(title=r"$\epsilon_{sb}$", title_fontsize=18, fontsize=14, loc="lower left")
     fig.tight_layout()
-    fig.savefig(f"plots/NTVvsErvsEsb_{rNfile}.jpeg", dpi=360)
+    fig.savefig(f"plots/NTVvsErvsEsb_{rNfile}.jpeg", dpi=1200)
 
-def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False):
+def plotDeltaTvsErAndEsb_original(rNfile="rN_0.75", speciesIndex=0, spinUp=False):
     """
     spinUp == True   : \Delta t = l - l_ambipolar / tau
     spinUp == False  : \Delta t = l_ambipolar - l / tau_ambipolar	
@@ -278,6 +280,38 @@ def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False):
     fig.tight_layout()
     fig.savefig(f"plots/DeltaTvsErvsEsb_{speciesIndex}_{rNfile}_{spinUp}.jpeg", dpi=360)
 
+def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1):
+    """
+    spinUp == True   : \Delta t = l - l_ambipolar / tau
+    spinUp == False  : \Delta t = l_ambipolar - l / tau_ambipolar   
+    """
+    main_dir = os.getcwd()
+    def extract_esb(file):
+        try:
+            return float(file.split("_")[1])
+        except:
+            return 999.9
+    rNval = float(rNfile.split("_")[1])
+    esbfiles = sorted([file for file in os.listdir() if file.startswith("esb")], key=extract_esb)
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot()
+    for i, esbfile in enumerate(tqdm(esbfiles, desc=f"Processing time scale at {rNfile}...")):
+        os.chdir(f"{esbfile}/raderscan")
+        Ers, DeltaTs = getDeltaTvsEr(rNfile, speciesIndex=speciesIndex)
+        esb = extract_esb(esbfile)
+        ax.plot(Ers, DeltaTs, label=f"{esb:.3f}", color=colors[i])
+        os.chdir(main_dir)
+
+    extra_plot_label = ["Electron", "Ion"][speciesIndex] + " "
+    ax.set_xlabel("$E_r$ [V/m]", fontsize=28)
+    ax.set_ylabel(r"$t_{fd}$ [s]", fontsize=28) # removed extra_plot_label for poster
+    ax.set_yscale('log')
+    #ax.set_title(r"$\sqrt{\psi_N}$ ="+f"{rNval}", fontsize=30) # removed title for poster
+    ax.tick_params(axis="both", labelsize=18)
+    ax.legend(title=r"$\epsilon_{sb}$", title_fontsize=18, fontsize=14, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(f"plots/DeltaTvsErvsEsb_tauavg_{speciesIndex}_{rNfile}.jpeg", dpi=1200)
+
 if __name__ == "__main__":
     """
     plotVvsesb()
@@ -287,12 +321,14 @@ if __name__ == "__main__":
     plotVvsesb(speciesIndex=0, omitPerp=True)
     plotVvsesb(speciesIndex=1, omitPerp=True)
     """
-    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1, spinUp=False)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1, spinUp=False)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1, spinUp=True)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1, spinUp=True)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=False)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=True)
-    plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=True)
+    plotNTVvsErAndEsb()
+    plotDeltaTvsErAndEsb()
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1, spinUp=False)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1, spinUp=False)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=1)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=False)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=False)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.35", speciesIndex=0, spinUp=True)
+    #plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=0, spinUp=True)
 

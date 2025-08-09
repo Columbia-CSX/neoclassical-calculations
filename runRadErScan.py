@@ -54,7 +54,7 @@ os.chdir(main_dir)
 
 os.system("mkdir raderscan")
 os.chdir("./raderscan")
-os.system("python /global/homes/m/michaelc/stelloptPlusSfincs/stelloptPlusSfincs/run.py --profilesIn "+proFile+" --eqIn "+eqFile+" --radialVar 3 --Nzeta 27 --Ntheta 23 --Nxi 71 --driftScheme 2 --saveLoc "+os.getcwd()+" --time 00-0:20:00 --nNodes 1 --notifs all --noRun")
+os.system("python /global/homes/m/michaelc/stelloptPlusSfincs/stelloptPlusSfincs/run.py --profilesIn "+proFile+" --eqIn "+eqFile+" --radialVar 3 --Nzeta 51 --Ntheta 15 --Nxi 149 --driftScheme 2 --saveLoc "+os.getcwd()+" --time 00-0:20:00 --nNodes 1 --notifs all --noRun")
 
 with open(f"./input.namelist", "r") as f:
     lines = f.readlines()

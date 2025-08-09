@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import make_smoothing_spline
-import seaborn as sns
-sns.set_context("talk")
 from writeInput import *
 
 # hardcoded arrays from staring at Ken Hammond's thesis for a long time

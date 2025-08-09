@@ -1,4 +1,6 @@
 __pycache__
 update_wallparams.sh
 hardcodedPlots.py
+update_wallparams2.sh
+delete_1hour_jobs.sh
 

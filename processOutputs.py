@@ -474,28 +474,28 @@ def getMetricTensor(folder, forceRedo=False):
 
     ## checking to see if sqrtg is sqrtg
 
-    sqrtg_from_tensor = np.sqrt(np.linalg.det(g.transpose(2, 3, 0, 1)))
+    #sqrtg_from_tensor = np.sqrt(np.linalg.det(g.transpose(2, 3, 0, 1)))
     
-    Gval = parseHDF5(folder, G).data
-    G_unit = Gval.unit
-    G_array = np.ones_like(ZETAS)*valsafe(Gval)
+    #Gval = parseHDF5(folder, G).data
+    #G_unit = Gval.unit
+    #G_array = np.ones_like(ZETAS)*valsafe(Gval)
 
-    Ival = parseHDF5(folder, I).data
-    I_unit = Ival.unit
-    I_array = np.ones_like(ZETAS)*valsafe(Ival)
+    #Ival = parseHDF5(folder, I).data
+    #I_unit = Ival.unit
+    #I_array = np.ones_like(ZETAS)*valsafe(Ival)
 
-    iotaval = parseHDF5(folder, iota).data
+    #iotaval = parseHDF5(folder, iota).data
 
-    modB = parseHDF5(folder, B).data
-    modB_unit = modB.unit
-    modB = valsafe(modB)
-    modB = np.vstack((modB, modB))
+    #modB = parseHDF5(folder, B).data
+    #modB_unit = modB.unit
+    #modB = valsafe(modB)
+    #modB = np.vstack((modB, modB))
 
-    sqrtg_from_sfincs = ( G_array + iotaval*I_array ) / modB**2
+    #sqrtg_from_sfincs = ( G_array + iotaval*I_array ) / modB**2
 
-    print("jacobian determinant comparison")
-    print(sqrtg_from_tensor)
-    print(sqrtg_from_sfincs)
+    #print("jacobian determinant comparison")
+    #print(sqrtg_from_tensor)
+    #print(sqrtg_from_sfincs)
 
     return g
 
@@ -668,21 +668,21 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         ax = fig.add_subplot()
         tickpositions = [0, np.pi]
         ticklabels = ["0", "$\pi$"]
-        ax.set_xlabel("$\zeta$", fontsize=22)
-        ax.set_ylabel(r"$\theta$", fontsize=22)
-        ax.set_xticks(tickpositions, ticklabels, fontsize=16)
-        ax.set_yticks(tickpositions, ticklabels, fontsize=16)
+        ax.set_xlabel("$\zeta$", fontsize=28)
+        ax.set_ylabel(r"$\theta$", fontsize=28)
+        ax.set_xticks(tickpositions, ticklabels, fontsize=18)
+        ax.set_yticks(tickpositions, ticklabels, fontsize=18)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
         strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
         #quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
         cbar = fig.colorbar(strm.lines)
         #cbar = fig.colorbar(quiv)
-        cbar.ax.tick_params(labelsize=16)
-        cbar.set_label(label, size=22)
+        cbar.ax.tick_params(labelsize=19)
+        cbar.set_label(label, size=28)
         fig.tight_layout()
         if not os.path.exists("./plots"):
             os.system("mkdir plots")
-        fig.savefig(f"./plots/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+        fig.savefig(f"./plots/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=1200)
         makeCSXSurface(folder, colorparam=modv, plotname=label)
 
         # makes plot of 1 >> | \iota + Gw/vB | criterion
@@ -691,17 +691,18 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         ax = fig.add_subplot()
         tickpositions = [0, np.pi]
         ticklabels = ["0", "$\pi$"]
-        ax.set_xlabel(r"$\zeta$", fontsize=22)
-        ax.set_ylabel(r"$\theta$", fontsize=22)
-        ax.set_xticks(tickpositions, ticklabels, fontsize=16)
-        ax.set_yticks(tickpositions, ticklabels, fontsize=16)
+        ax.set_xlabel(r"$\zeta$", fontsize=28)
+        ax.set_ylabel(r"$\theta$", fontsize=28)
+        ax.set_xticks(tickpositions, ticklabels, fontsize=18)
+        ax.set_yticks(tickpositions, ticklabels, fontsize=18)
         criterion = valsafe(iotaval) + valsafe((G_array*w)/(vPar*modB))
         criterion = abs(valsafe(criterion))
-        cont = ax.contourf(ZETAS, THETAS, criterion, levels=50, cmap=parula, norm=color.LogNorm(vmin=criterion.min(), vmax=criterion.max()))
+        levels = np.logspace(np.log10(criterion.min()), np.log10(criterion.max()), num=50)
+        cont = ax.contourf(ZETAS, THETAS, criterion, levels=levels, cmap=parula, norm=color.LogNorm(vmin=criterion.min(), vmax=criterion.max()))
         cbar = fig.colorbar(cont)
         cbar.ax.set_ylabel(r"$|\iota + \frac{Gw}{v_{||}B}|$")
         fig.tight_layout()
-        fig.savefig(f"./plots/{folder.replace('.', '_')}_criterion_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=360)
+        fig.savefig(f"./plots/{folder.replace('.', '_')}_criterion_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=1200)
 
     return v_theta, v_zeta, modv
 
@@ -1000,6 +1001,7 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
                     del Ers[-1]
                     del taus[-1]
                     continue
+    
     if returnAMD:
         ___, amds = zip(*sorted(zip(Ers, amds), key=lambda pair: pair[0]))
         amds = list(amds)
@@ -1013,7 +1015,38 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
 
     return Ers, taus
 
+def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
+    assert rootChoice in ["low", "middle", "high"], "root choice should be low, middle or high"
+    Ers, taus, amds = getNTVvsEr(folder, speciesIndex=speciesIndex, returnAMD=True)
+    
+    ambipolar_index = np.squeeze(np.argwhere(np.sign(taus[:-1])-np.sign(taus[1:])))
+    try:
+        if len(ambipolar_index) != 3:
+            print(ambipolar_index)
+            inp = input("Type the ambipolar index")
+            ambipolar_index = int(inp)
+        else:
+            ambipolar_index = ambipolar_index[0] if rootChoice == "low" else ambipolar_index
+            ambipolar_index = ambipolar_index[1] if rootChoice == "middle" else ambipolar_index
+            ambipolar_index = ambipolar_index[2] if rootChoice == "high" else ambipolar_index
+    except:
+        pass
+    
+    DeltaTs = []
+    for i in range(0, len(Ers)):
+        if i < ambipolar_index:
+            tau_avg = np.nanmean(taus[i:ambipolar_index])
+        if i == ambipolar_index:
+            DeltaTs.append(np.nan)
+            continue
+        if i > ambipolar_index:
+            tau_avg = np.nanmean(taus[ambipolar_index:i])
+       
+        DeltaL = abs(amds[i]-amds[ambipolar_index])
+        DeltaTs.append(DeltaL/abs(tau_avg))
 
+    return Ers, DeltaTs
+    
 if __name__ == "__main__":
 
     # ensures a plots folder in outputsDir
@@ -1022,13 +1055,19 @@ if __name__ == "__main__":
 
     # makeStreamPlot("rN_0.95", vPar_e)
     # makeStreamPlot("rN_0.95", vPar_i)
+    try:
+        make_qlcfs_file()
+    except:
+        print("Couldn't make QLFCS file")
 
-    make_qlcfs_file()
-    for radius in [file for file in os.listdir() if file.startswith("rN_0.75")]:
+    for radius in [file for file in os.listdir() if file.startswith("rN")]:
         print(f"Analyzing file {radius}...")
-        #getFullV(radius)
+        #getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
+        #getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+        makeCSXSurface(radius, colorparam=B)
         #getTotalHeatFlux(radius)
-        getMetricTensor(radius)
+        #getMetricTensor(radius)
+        #getDeltaTvsEr(radius)
         #getRadialCurrent(radius)
         #getFullV(radius, omitPerp=True, plot=True)
         #getFullV(radius, omitPar=True, plot=True)

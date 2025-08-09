@@ -66,11 +66,14 @@ def zeroCrossings(x, y):
 def get_Er(data, rootChoice, zeroJrThreshold=1e-4, differentErThreshold=5.0, ErRange=99):
     assert rootChoice in ['low', 'middle', 'high']
     data = [data[0], np.array(data[1])-Ir]
+    ErMin = np.min(data[0])
+    ErMax = np.max(data[0])
+    print("ErMin, ErMax", ErMin, ErMax)
     Jr = interp1d(data[0], data[1], kind='linear')
-    Er_range = np.linspace(-ErRange, ErRange, 1000)
+    Er_range = np.linspace(ErMin*0.99, ErMax*0.99, 1000)
     Jrs = Jr(Er_range)
     zero_crossings = zeroCrossings(data[0], data[1])
-    Er_candidates = [Er for Er in zero_crossings if abs(Er) <= ErRange]
+    Er_candidates = [Er for Er in zero_crossings if abs(Er) <= np.max([abs(ErMin), abs(ErMax)])]
     
     print("Initial ambipolar Er candidates:", Er_candidates)
     aErs = []
@@ -87,12 +90,12 @@ def get_Er(data, rootChoice, zeroJrThreshold=1e-4, differentErThreshold=5.0, ErR
     if aEr is None:
         for er in Er_candidates:
             #print(max(er-differentErThreshold, -ErRange), min(er+differentErThreshold, ErRange))
-            er_range = np.linspace(max(er-differentErThreshold, -ErRange), min(er+differentErThreshold, ErRange), 500000)
+            er_range = np.linspace(max(er-differentErThreshold, ErMin), min(er+differentErThreshold, ErMax), 500000)
             jrs = Jr(er_range)
             if crossesZero(jrs):
                 aErs.append(er_range[np.argmin(abs(jrs))])
             else:
-                er_range = np.linspace(max(er-differentErThreshold/5, -ErRange), min(er+differentErThreshold/5, ErRange), 500000)
+                er_range = np.linspace(max(er-differentErThreshold/5, ErMin), min(er+differentErThreshold/5, ErMax), 500000)
                 jrs = Jr(er_range)
                 if crossesZero(jrs):
                     aErs.append(er_range[np.argmin(abs(jrs))])
