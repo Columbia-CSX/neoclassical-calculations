@@ -1,9 +1,15 @@
+"""
+Scans through the raderscan folder made by runRadErScan.py
+and organizes the radial current vs Er data on each flux surface into a file
+to be read by interpret.py.
+"""
 import os
 from processOutputs import *
 import numpy as np
 from tqdm import tqdm
 import argparse
 
+# --- Enables and disables progress bar --- #
 disabletqdm = None
 
 parser = argparse.ArgumentParser(description="process input tags")
@@ -14,6 +20,7 @@ if disabletqdm is None:
     disabletqdm=False
 else:
     disabletqdm=True
+# ----------------------------------------- #
 
 main_dir = os.getcwd()
 assert "raderscan" in os.listdir(), "parseRadErScan.py should be called in the directory containing 'raderscan' folder"
@@ -21,8 +28,11 @@ assert "raderscan" in os.listdir(), "parseRadErScan.py should be called in the d
 os.chdir("raderscan")
 os.system("mkdir determineEr")
 
+# ---------- Main part ------------------------------------------------------------#
 # for each rN_0.xx directory in raderscan, sorts through the subdirectories Er___
-# stores a .dat file of Jr vs Er data in determineEr for each radial position
+# stores a .dat file of Ir vs Er data in determineEr for each radial position. Also
+# saves a figure showing Ir vs Er for each flux surface. Spits out details about
+# and skips over failed sfincs runs.
 
 rN_folders = [folder for folder in os.listdir() if folder.startswith("rN_")]
 

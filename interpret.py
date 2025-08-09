@@ -32,7 +32,8 @@ files = os.listdir('./')
 # (rN = sqrt(psi/psiLCFS) where psi is the toroidal flux) makes an
 # array "data" containing a 2D array of data from a scan of the radial
 # current Ir over Er on the rN flux surface. "datas" is an array of these
-# arrays of length len(rN).
+# arrays of length len(rN). These "data" arrays come from the .dat files
+# created by the script parseRadErScan.py.
 rNs = []
 datas = []
 for file in files:
