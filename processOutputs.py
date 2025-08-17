@@ -1,3 +1,11 @@
+"""
+Contains functions for performing additional calculations and making
+plots using sfincs outputs. Outputs from sfincs are handled using a
+custom Parameter class which contains information about the de-
+normalizing of sfincs outputs, the name of the sfincs parameter
+in the sfincs output .h5 file, and sometimes an updated name I use
+for plotting.
+"""
 import os
 import numpy as np
 import h5py
@@ -40,6 +48,14 @@ def index_along_dim(arr, dim, idx):
     return arr[tuple(indexer)]
 
 def getPathToWout():
+    """
+    called from within the raderscan or ambipolar folder (a
+    folder containing folders like rN_x.xx). Parses the
+    sfincs input file to see which wout file corresponds to
+    the .bc file used for sfincs. For this to work properly,
+    the wout and .bc files should be the same name save for the 
+    file extenstion (.nc for wout.)
+    """
     folders = os.listdir()
     main_dir = os.getcwd()
 
@@ -99,6 +115,12 @@ mBar = 1.67262192595e-27*u.kg #kg
 vBar = np.sqrt(2*TBar/mBar).to(u.m/u.s) #m/s
 
 ### Parameters supported ###
+
+# format:
+# param = Parameter("parameter_name_in_sfincsOutput.h5", "description of parameter once scaling/particle species seperation is
+#                   applied", scaling=whatever scale factor is necessary to get the quantity of interest in SI units, speciesIndex=
+#                   0 (for electrons) or 1 (for ions).
+
 rN = Parameter("rN", r"$\sqrt{\psi_N}$")
 psiN = Parameter("psiN", r"$\psi_N$")
 FSAbootstrapCurrentDensity = Parameter("FSABjHatOverB0", r"Bootstrap Current $\langle \mathbf{j}\cdot\mathbf{B} \rangle/B_{00}$ [A$\mathrm{m}^{-2}$]"                                       , scaling=e*vBar*nBar)
@@ -138,6 +160,14 @@ totalHeatFlux_e = Parameter("heatFluxBeforeSurfaceIntegral_vm", r"Total heat flu
 totalHeatFlux_i = Parameter("heatFluxBeforeSurfaceIntegral_vm", r"Total heat flux", scaling=nBar*vBar*vBar*vBar*BBar*mBar*RBar, speciesIndex=1)
 
 def valsafe(quantity):
+    """
+    processOutputs.py and a few other scripts were written to be
+    used with astropy.units (mostly for debugging + validation 
+    purposes). valsafe is a function which returns just whatever
+    value is associated with a quantity, removing units if it has
+    them and doing nothing if it doesn't. It is compatible with
+    iterables of arbitrary shape.
+    """
     try:
         return quantity.value
     except:
@@ -153,6 +183,13 @@ def valsafe(quantity):
             return quantity
 
 def parseHDF5(folder, parameter, ignoreFileFalure=False):
+    """
+    For the sfincs run in 'folder', returns the quantity (with units
+    if applicable) corresponding to the given parameter.
+
+    "ignoreFileFalure" does nothing, but I'm leaving it here for now
+    just in case 
+    """
     f = h5py.File(f"./{folder}/sfincsOutput.h5", 'r')
     assert parameter.name in list(f.keys()), f"invalid sfincs parameter {parameter.name} provided to parseHDF5\n if this is a valid parameter, this error indicates a failed sfincs run."
     paramDataset = f[parameter.name]
@@ -160,6 +197,16 @@ def parseHDF5(folder, parameter, ignoreFileFalure=False):
     return parameter.speciate()
     
 def plotProfile(parameter, radialCoordinate, plot=True, sort=True):
+    """
+    generates a plot of "parameter" vs "radialCoordinate". Radial coordinate
+    doesn't actually have to be "rN" or "psiHat" or similar, it can also be
+    anything else which is a flux function. 
+
+    Parameter should also be a flux function or a flux surface averaged
+    quantity, this code will not work for Parameters containing local information
+    (quantities stored in arrays which dimensions corresponding to theta and zeta,
+    the poloidal and toroidal Boozer angles)"
+    """
     dirfiles = os.listdir()
     radialCoords = []
     vals = []
@@ -187,7 +234,11 @@ def plotProfile(parameter, radialCoordinate, plot=True, sort=True):
 
     return radialCoords, vals
 
-def plotHeatmap(folder, parameter, save=True, specificDirectory=None, verb=True, nametag=None, contourLevels=None, cmap="viridis"):
+def plotHeatmap(folder, parameter, save=True, specificDirectory=None, verb=True, nametag=None, contourLevels=None, cmap=parula):
+    """
+    makes a heatmap figure of a given parameter which contains local information (theta + zeta dimensions).
+    Only plotted over a single field period.
+    """
     parameter = parseHDF5(folder, parameter)
     zetas = parseHDF5(folder, zeta)
     thetas = parseHDF5(folder, theta)
@@ -215,6 +266,10 @@ def plotHeatmap(folder, parameter, save=True, specificDirectory=None, verb=True,
     return Z, T, parameter
 
 def makeHeatmapGif(parameter, radialCoordinate, contourLevels=None, cmap="turbo"):
+    """
+    creates a gif of a certain parameter which is plottable as a heat map, with
+    each gif frame corresponding to a different radial coordinate. 
+    """
     dirfiles = os.listdir()
     radialCoords = []
     imageFiles = []
@@ -242,9 +297,19 @@ def makeHeatmapGif(parameter, radialCoordinate, contourLevels=None, cmap="turbo"
     print(f"Created {parameter.name}{parameter.speciesIndex}.gif.")
     
 def getLCFS():
+    """
+    if run in a folder containing files like rN_x.xx, returns
+    the string like rN_x.xx corresponding to the surface nearest
+    the last closed flux surface.
+    """
     return "_".join(sorted([s.split("_") for s in [f for f in os.listdir() if f.startswith("rN")]], key= lambda pair: float(pair[1]))[-1])
 
 def getNeoclassicalHeatFlux(folder):
+    """
+    returns the quantity (with units) of
+    the neoclassical heat (as power) through the flux
+    surface specified by folder
+    """
     hf_e = parseHDF5(folder, heatFlux_vm_psi_e)
     print(hf_e.data)
     hf_i = parseHDF5(folder, heatFlux_vm_psi_i)
@@ -253,6 +318,11 @@ def getNeoclassicalHeatFlux(folder):
     return ((hf_e.data+hf_i.data)*V.data).to(u.W)
     
 def getGyroBohmHeatFluxEstimate(folder):
+    """
+    returns an estimate of the gyro-Bohm heat
+    through a flux surface specified by folder. Note this is still 
+    hardcoded for CSX
+    """
     Q_GB = 1.0
     surf_area = 2*u.m*u.m # guess of surface area of LCFS
     Ti = parseHDF5(folder, T_i).data.to(u.kg*u.m*u.m/u.s/u.s)
@@ -278,6 +348,11 @@ def getGyroBohmHeatFluxEstimate(folder):
     return Q_GB.to(u.W)
     
 def make_qlcfs_file(lcfs=None):
+    """
+    Makes a file containing the net power through
+    the LCFS due to neoclassical physics and gyro-Bohm
+    heat flux. 
+    """
     print("Making qlcfs.npy...")
     if lcfs is None:
         lcfs = getLCFS()
@@ -292,6 +367,11 @@ def make_qlcfs_file(lcfs=None):
     return Q_N, Q_T
 
 def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultplotname", saveSurfaceMeshAsNpy=False):
+    """
+    makes a MATLAB data file used to plot a flux surface, with the option to have the
+    color of the surface correspond to a parameter "colorparam". Option to 
+    save also as a npy file (for Aiden and Thaddaeus).
+    """
     psi_N = parseHDF5(folder, psiN).data
     thetas = parseHDF5(folder, theta).data
     zetas1 = parseHDF5(folder, zeta).data
@@ -335,6 +415,12 @@ def makeCSXSurface(folder, colorparam=None, savematlab=True, plotname="defaultpl
         np.save(f"./plots/csxSurfaceMesh_{folder.replace('.', '_')}.npy", np.array([X, Y, Z]))
 
 def makePeriodic(thetas, zetas, paramdata):
+    """
+    extends a parameter from one field period to two.
+    Most of the plotting functions do this implicitly anyway--
+    this is CSX specific (although it should work for any
+    2 field period stellarators)
+    """
     thetas = np.append(thetas, 2*np.pi)
     zetas = np.concatenate((zetas, zetas+np.pi))
     zetas = np.append(zetas, 2*np.pi)
@@ -359,14 +445,20 @@ def scale_by_epsb(B, epsb):
 
 def getQSError(B):
     """
-    compute [ \sum_{m, n\neq 0} (B_{mn}/B_{00})^2 ]^1/2
-    note that positive and negative m and n are included
+    compute [ \sum_{m, n\neq 0} (B_{mn}/B_{00})^2 ]^1/2.
+    note that positive and negative m and n are included.
     here, QS means QA
     """
     Bmn = fft2(B)
     return np.sqrt(np.sum(abs((Bmn/Bmn[0, 0])[:, 1:])**2))
 
 def getUnitVectorB(folder, rollover=False):
+    """
+    for a given flux surface, returns a grid of values
+    bthetas, bzetas, which are the components of the
+    unit vector along B along the unit vectors theta hat
+    and zeta hat, defi
+    """
     psi_N = parseHDF5(folder, psiN).data
     thetas = parseHDF5(folder, theta).data
     zetas1 = parseHDF5(folder, zeta).data
@@ -402,6 +494,10 @@ def getUnitVectorB(folder, rollover=False):
     return THETA, ZETA, btheta, bzeta
 
 def makeStreamPlot(folder, colorparam=B):
+    """
+    makes a stream plot (curvy linked arrows) of the unit vector
+    along the magnetic field
+    """
     THETA, ZETA, btheta, bzeta = getUnitVectorB(folder)
     modB = valsafe(parseHDF5(folder, colorparam).data)
     modB = np.vstack((modB, modB)).T
@@ -420,6 +516,9 @@ def makeStreamPlot(folder, colorparam=B):
     fig.savefig(f"./plots/stream_{colorparam.name}_{colorparam.speciesIndex}.jpeg")
 
 def makeQuiverPlotUnitB(folder):
+    """
+    makes a quiver plot of the unit vector along the magnetic field
+    """
     THETA, ZETA, btheta, bzeta = getUnitVectorB(folder)
     C = np.hypot(bzeta, btheta)
     fig = plt.figure(figsize=(16, 8))
@@ -430,6 +529,19 @@ def makeQuiverPlotUnitB(folder):
     fig.savefig("./plots/unitbquivC.jpeg")
 
 def getMetricTensor(folder, forceRedo=False):
+    """
+    Calculates the metric tensor at every point on the theta, zeta
+    grid used for a given sfincs run. Returns a 3x3 array where each 
+    element is a meshgrid of values (either len(theta) x len(zeta) or
+    the other way around). By metric tensor, I mean g=J^TJ where J is the 
+    Jacobian (code commented out below is meant to confirm that |det(g)|
+    = det(J)^2. g_pq = \partial \Vec{r} / \partial p \cdot \partial \Vec{r} /
+    \partial q.
+
+    Since it's somewhat expensive to calculate, it is pickled and stored so
+    as to be calculated only once. The forceRedo option overwrites this
+    functionality.
+    """
     filename = f"./flows/{folder.replace('.', '_')}_metricTensor.pkl"
     if os.path.exists(filename) and not forceRedo:
         with open(filename, "rb") as f:
@@ -501,6 +613,20 @@ def getMetricTensor(folder, forceRedo=False):
 
 
 def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, forceRedo=False):
+    """
+    Obtains the "full" flow velocity of a particle species specified by speciesIndex (0 is electron, 1 is
+    ion) on a flux surface specified by "folder" (a string like 'rN_x.xx'). "Full" means we add together
+    the parallel flow from sfincs to the diamagnetic + perpendicular ExB flow. Setting omitPar to True will
+    scale the parallel contribution by 0.0, and setting omitPerp to True will do the same to the perpendicular
+    contribution. Since these calculations can take some time, they are pickled and stored for later access--
+    setting forceRedo to True will skip the loading step and recalculate the flow regardless of whether or not
+    it was calculated before (not recommended, but it was useful for debugging).
+
+    The flow is returned as a tuple of meshgrids v_theta, v_zeta, modv. modv is the scalar flow velocity and 
+    the vector flow velocity is
+
+    \Vec{v} = v_theta dr/dtheta + v_zeta + dr/dzeta.
+    """
     filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.pkl"
     if os.path.exists(filename) and not forceRedo:
         with open(filename, "rb") as f:
@@ -707,6 +833,14 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     return v_theta, v_zeta, modv
 
 def getAngularMomentumDensity(folder, speciesIndex=0):
+    """
+    Finds the scalar angular momentum density
+
+    m_s n_s \Vec{v} \cdot dr/dzeta
+
+    as a meshgrid over theta, zeta on the flux surface
+    specified by "folder".
+    """
     
     v_theta, v_zeta, modv = getFullV(folder, speciesIndex=speciesIndex)
 
@@ -725,7 +859,7 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
         m = 9.10938e-31*u.kg
     else:
         n = n_i
-        m = 4.6518341428e-26*u.kg
+        m = 4.6518341428e-26*u.kg # hardcoded in mass of Deuterium ions
 
     filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_False_par_False.pkl"
 
@@ -747,7 +881,11 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     return AngularMomentumField
 
 def getRadialCurrent(folder):
-    # FSA < J dot \nabla \psi > = fsa
+    """
+    Computes the flux surface averaged radial current (in Amperes)
+    as the charge number weighted sum over species of the flux surface
+    averaged particle fluxes, multiplied by V'(\psi).
+    """
     eFlux = parseHDF5(folder, eFlux_vm_psi).data
     iFlux = parseHDF5(folder, iFlux_vm_psi).data
     vprime = parseHDF5(folder, VPrime).data
@@ -757,6 +895,12 @@ def getRadialCurrent(folder):
     return radial_current
 
 def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False):
+    """
+    Returns the flux surface average of a meshgrid ARRAY over the 
+    flux surface specified by "folder". If justIntegral is True,
+    then the integral over the flux surface (without the Jacobian) is
+    done. The result is a scalar quantity.
+    """
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas+np.pi))
@@ -786,6 +930,12 @@ def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False):
     return integral/vprime
 
 def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=False, plot=False):
+    """
+    Plots the velocity profile versus radialCoordinate for the particle species specified by 
+    speciesIndex. omitPar/omitPerp have the same function as in getFullV. Returns a tuple of
+    arrays (radialCoords, vals) where vals contains the flux surface averaged flow velocity 
+    values corresponding to the flux surface specified in radialCoords.
+    """
     dirfiles = os.listdir()
     radialCoords = []
     vals = []
@@ -824,10 +974,20 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
     return radialCoords, vals
 
 def getFSAAngularMomentumDensity(folder, speciesIndex=0):
+    """
+    Returns flux surface averaged angular momentum density on "folder"
+    for the given particle species (see above "getAngularMomentumDensity")
+    """
     L_density = getAngularMomentumDensity(folder, speciesIndex=speciesIndex)
     return fluxSurfaceAverageOfArray(folder, L_density).to(u.kg/u.m/u.s)
 
 def getFSAAngularMomentumDensityProfile(speciesIndex=0, plot=True):
+    """
+    Plots the flux surface averaged angular momentum density profile vs
+    rN = \sqrt(\psi/\psiLCFS). Returns tuple of arrays (radialCoords, vals)
+    where radialCoords contains the rN values and vals contains the flux 
+    surface averaged angular momentum density values.
+    """
     dirfiles = os.listdir()
     radialCoords = []
     vals = []
@@ -863,6 +1023,12 @@ def getFSAAngularMomentumDensityProfile(speciesIndex=0, plot=True):
     return radialCoords, vals
 
 def getNTVTorque(folder, speciesIndex=0):
+    """
+    Computes \iota \langle \Vec{J} \cdot nabla \psi rangle
+    for the flux surface specified by "folder". This should be the neoclassical
+    toroidal viscosity, roughly the scalar torque density on the plasma volume associated
+    with the JxB force in the toroidal direction.
+    """
     eFlux = parseHDF5(folder, eFlux_vm_psi).data
     iFlux = parseHDF5(folder, iFlux_vm_psi).data
     fsaj = e*iFlux - e*eFlux
@@ -871,12 +1037,18 @@ def getNTVTorque(folder, speciesIndex=0):
     return NTV.to(u.kg/u.m/u.s/u.s)
 
 def getDeltaT(folder, speciesIndex=0):
+    """
+    I'm pretty sure this function is never used, but I've left it in here for now just in case
+    """
     try:
         return ( getFSAAngularMomentumDensity(folder, speciesIndex=speciesIndex)/getNTVTorque(folder, speciesIndex=speciesIndex) ).to(u.us)
     except AssertionError:
         print(f"Skipping Delta T calculation for {folder}")
 
 def getDeltaTProfile(speciesIndex=0, plot=True):
+    """
+    same with this one, I don't think this function is used
+    """
     dirfiles = os.listdir()
     radialCoords = []
     vals = []
@@ -912,6 +1084,10 @@ def getDeltaTProfile(speciesIndex=0, plot=True):
     return radialCoords, vals
 
 def getAreaOfFluxSurface(folder):
+    """
+    Computes the surface area of the flux surface specified by "folder" using
+    the metric tensor
+    """
     filename = f"./flows/{folder.replace('.', '_')}_fullV_0_perp_False_par_False.pkl"
     if os.path.exists(filename):
         with open(filename, "rb") as f:
@@ -932,6 +1108,13 @@ def getAreaOfFluxSurface(folder):
     return fluxSurfaceAverageOfArray(folder, np.sqrt(detEFG), justIntegral=True)*u.m*u.m
 
 def getTotalHeatFlux(folder):
+    """
+    this is not used anywhere either
+
+    It was meant to compute the local heat flux on a flux surface, but
+    it stemmed from a misunderstanding of how the heat flux is computed in
+    sfincs.
+    """
     # here "total" doesn't mean classical + neoclassical + turbulent
     # it means just the neoclassical heat flux but not flux surface averaged
     
@@ -961,6 +1144,14 @@ def getTotalHeatFlux(folder):
     return heatFlux
 
 def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
+    """
+    Plots NTV as a function of Er on the flux surface "folder".
+    Should be run in a raderscan (not ambipolar) directory.
+    Returns a tuple of (Er, taus) containing Er values and
+    corresponding NTV torque values. If returnAMD is True, additionally
+    returns flux surface averaged angular momentum density values 
+    corresponding to the given flux surface and speciesIndex.
+    """
     # to be run in raderscan directory
     # folder is some radius
     main_dir = os.getcwd()
@@ -1016,6 +1207,16 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
     return Ers, taus
 
 def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
+    """
+    Plots DeltaT as a function of Er. May involve some debugging-- doesn't robustly
+    handle ambipolar Er calculation.
+
+    DeltaT(Er) = flux surface averaged angular momentum density /
+                 torque density averaged from given Er to ambipolar Er
+
+    Returns a tuple (Er, DeltaTs) of DeltaT values corresponding to the Er values.
+    """
+
     assert rootChoice in ["low", "middle", "high"], "root choice should be low, middle or high"
     Ers, taus, amds = getNTVvsEr(folder, speciesIndex=speciesIndex, returnAMD=True)
     
@@ -1049,6 +1250,12 @@ def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
     
 if __name__ == "__main__":
 
+    """
+    the things that will actually be run when you write
+        
+        python processOutputs.py
+    """
+
     # ensures a plots folder in outputsDir
     if not os.path.exists("./plots"):
         os.system("mkdir plots")
@@ -1077,6 +1284,11 @@ if __name__ == "__main__":
         #getFullV(radius, omitPar=True, plot=True, speciesIndex=1)
         #getAngularMomentumDensity(radius)
 
+"""
+Some plots that I made that I didn't want to get rid of, used to show
+the asymmetric mode scaling etc. These are probably safe to delete at
+this point but I'm like a code hoarder I can never let go
+"""
 """
 folder = "rN_0.95"
 plotProfile(FSAbootstrapCurrentDensity, rN)
