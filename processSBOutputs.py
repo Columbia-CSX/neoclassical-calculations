@@ -2,19 +2,26 @@ from processOutputs import *
 from tqdm import tqdm
 
 """
-meant to be called from the same folder runSBRadErScan.py was called in,
+Meant to be called from the same folder runSBRadErScan.py was called in,
 the directory containing esb_* folders.
 
-contains plotting routines for comparing plasma parameters across different
-values of esb
+Contains plotting routines for comparing plasma parameters across different
+values of the symmetry breaking factor esb.
 """
 
 colors = ["crimson", "darkorange", "goldenrod", "green", "#259B9A", columbia]
 
+# all plots will be saved in the "./plots/" directory
 if not os.path.exists("./plots"):
     os.system("mkdir plots")
 
 def plotVvsesb(speciesIndex=0, omitPar=False, omitPerp=False, makesubplots=True):
+    """
+    Plots flow velocity as of the particle species specified by speciesIndex (0
+    electron, 1 ion), if omitPar or omitPerp are true then the parallel or
+    perpendicular components respectively of the flow will be ignored in the
+    flux surface averaged flow velocity calculation. See getVprofile in processOutputs.
+    """
     def extract_esb(file):
         try:
             return float(file.split("_")[1])
@@ -58,6 +65,10 @@ def plotVvsesb(speciesIndex=0, omitPar=False, omitPerp=False, makesubplots=True)
     fig.savefig(f"plots/{filename}_vs_rN.jpeg")
 
 def plotHeat():
+    """
+    Makes plots of heating power due to neoclassical and turbulent heat flux
+    as a function of esb on the last available flux surface.
+    """
     main_dir = os.getcwd()
     Q_Ns = []
     Q_Ts = []
@@ -113,6 +124,10 @@ def plotHeat():
     return esbs, Q_Ns, Q_Ts
 
 def asNumber(string):
+    """
+    Helper function to convert strings to float or int
+    if the string is just a number.
+    """
     try:
         num = float(string)
         num_int = int(string)
@@ -123,6 +138,9 @@ def asNumber(string):
         return string
 
 def selectRadialCurrent(options, prompt):
+    """
+    Helper function which takes in a radial current value from the user.
+    """
     print(prompt)
     print("Select from the following options by using the index of the")
     print("desired option in the list (starting with 0) or by copying ")
@@ -138,6 +156,16 @@ def selectRadialCurrent(options, prompt):
     return options[asNumber(user)]
 
 def plot_DeltaT_vs_rN_and_esb(speciesIndex=0):
+    """
+    This function is kind of messy, I never ended up using it
+    and I don't think anyone else should either.
+
+    It plots DeltaT as a function of both rN and esb but requires
+    some radial current choice from the user and additional runs of 
+    runAmbipolar (or runSBAmbipolar) which a tag specifying certain radial
+    currents. I recommend looking at other functions which operate in the 
+    raderscan directory.
+    """
     
     main_dir = os.getcwd()
     esbfiles = [file for file in os.listdir() if file.startswith("esb")]
@@ -208,6 +236,11 @@ def plot_DeltaT_vs_rN_and_esb(speciesIndex=0):
     fig.savefig(f"./plots/{speciesIndex}_DeltaT_{ir1.replace('.','_')}_{ir2.replace('.','_')}.jpeg", dpi=360)
 
 def plotNTVvsErAndEsb(rNfile="rN_0.75"):
+    """
+    Plots NTV = \iota < J nabla psi  > vs Er, and makes several
+    curves for each esb value present. Plots for a single flux surface
+    specified by "rNfile"
+    """
     main_dir = os.getcwd()
     def extract_esb(file):
         try:
@@ -235,8 +268,13 @@ def plotNTVvsErAndEsb(rNfile="rN_0.75"):
 
 def plotDeltaTvsErAndEsb_original(rNfile="rN_0.75", speciesIndex=0, spinUp=False):
     """
+    obsolete, but I'm keeping it here just in case.
+
     spinUp == True   : \Delta t = l - l_ambipolar / tau
     spinUp == False  : \Delta t = l_ambipolar - l / tau_ambipolar	
+
+    Uses a different method of calculating Delta T (no
+    average of tau_NTV over Er range)
     """
     main_dir = os.getcwd()
     def extract_esb(file):
@@ -282,8 +320,14 @@ def plotDeltaTvsErAndEsb_original(rNfile="rN_0.75", speciesIndex=0, spinUp=False
 
 def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1):
     """
-    spinUp == True   : \Delta t = l - l_ambipolar / tau
-    spinUp == False  : \Delta t = l_ambipolar - l / tau_ambipolar   
+    Plots DeltaT as a function of Er
+
+    l = angular momentum density
+    Er0 = ambipolar Er
+    Delta T = |l(Er) - l(Er0)| / |average NTV torque density between Er and Er0|
+
+    on the flux surface specified by rNfile for the species specified by
+    speciesIndex. 
     """
     main_dir = os.getcwd()
     def extract_esb(file):
@@ -313,6 +357,11 @@ def plotDeltaTvsErAndEsb(rNfile="rN_0.75", speciesIndex=1):
     fig.savefig(f"plots/DeltaTvsErvsEsb_tauavg_{speciesIndex}_{rNfile}.jpeg", dpi=1200)
 
 if __name__ == "__main__":
+    """
+    What will be run when 
+        python processSBOutputs.py
+    is typed into the terminal
+    """
     """
     plotVvsesb()
     plotVvsesb(speciesIndex=1)

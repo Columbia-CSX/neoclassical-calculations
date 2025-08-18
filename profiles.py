@@ -1,3 +1,12 @@
+"""
+This script generates (using a helper script from writeInput.py)
+a BEAMS3D style input file for the stelloptPlusSfincs code to use
+to make a sfincs style "profiles" file. Profiles are specified
+by some hardcoded arrays which are upsampled using splines (upsampling
+is done with the intent to improve the accuracy of the derivative
+computation done in stelloptPlusSfincs, since what sfincs really cares
+about is the gradient profiles)
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import make_smoothing_spline
@@ -49,7 +58,7 @@ psi_many = np.linspace(0, 1, 100)
 # plt.show()
 # fig.savefig("profiles_vs_psiN_steep.png")
 
-temperature_multiplier = 256.0
+temperature_multiplier = 1.0
 
 NE_AUX_S = np.linspace(0, 1, 20)
 NE_AUX_F = n_72_spline(NE_AUX_S)
