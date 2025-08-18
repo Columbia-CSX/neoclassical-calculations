@@ -21,5 +21,5 @@ If you'd also like to scan over different values of the symmetry breaking factor
 Feel free to email me if you have any questions : )
 
 mc5893@columbia.edu    <-- preferred until September 2025\
-macampagna@wm.edu      <-- preffered until June 2026\
+macampagna@wm.edu      <-- preferred until June 2026\
 michampagn13@gmail.com <-- just in case
