@@ -24,10 +24,20 @@ t_72_adjusted = np.array([7.5, 7.4, 7.00, 6.9, 6.7, 5.4, 4.83, 4.68, 4.51, 4.45,
 # new profiles -- linear in temperature
 # loosely inspired by https://www.researchgate.net/figure/HSX-stellarator-profiles-of-a-electron-temperature-and-b-density-in-QHS-and-mirror_fig23_228707435
 
-n_adjusted = 1e17 * np.exp( (-1.0*rho/1.11)**3 )
-t_adjusted = 7.5 * (1 - (1/1.2)*rho)
-t_adjusted[2] = t_adjusted[2]+0.5
+### ----------------------------------------------------------- ###
+###   USER PART: SPECIFY ELECTRON TEMPERATURE t AND DENSITY n
+### ----------------------------------------------------------- ###
+ne = 1e17 * np.exp( (-1.0*rho/1.11)**3 )
+Te = 7.5 * (1 - (1/1.2)*rho)
 
+temperature_multiplier = 0.3 # ratio Ti/Te
+output_file_name = f"profile.opt"
+### ----------------------------------------------------------- ###
+###                      END USER PART                          ###
+### ----------------------------------------------------------- ###
+
+n_adjusted = ne
+t_adjusted = Te
 psi  = rho**2
 
 ### for upsampling of the hardcoded arrays (should make Brandon's derivative scheme
@@ -58,8 +68,6 @@ psi_many = np.linspace(0, 1, 100)
 # plt.show()
 # fig.savefig("profiles_vs_psiN_steep.png")
 
-temperature_multiplier = 1.0
-
 NE_AUX_S = np.linspace(0, 1, 20)
 NE_AUX_F = n_72_spline(NE_AUX_S)
 TE_AUX_S = NE_AUX_S
@@ -71,7 +79,7 @@ TI_AUX_F = TE_AUX_F*0.3
 NI_AUX_M = np.array([4.6518341428*10**(-26)])
 NI_AUX_Z = np.array([1], dtype=np.int32)
 
-outfile = f"steep_{t_adjusted[0]*temperature_multiplier:.5g}_eV.opt"
+outfile = output_file_name
 write_profiles(
     outfile,
     NE_AUX_S, NE_AUX_F,
