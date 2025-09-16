@@ -638,9 +638,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
                 print("\t"+f"{filename}")
                 print("(Re)calculating flow data...")
 
+    stelsymfactor = 0.5 # 0.5 for HSX, 1.0 for CSX (2/numfieldperiods)
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
-    zetas = np.concatenate((zetas, zetas + np.pi))
+    zetas = np.concatenate((zetas, zetas + np.pi*stelsymfactor))
     psi_N = parseHDF5(folder, psiN).data
     
     THETAS, ZETAS = np.meshgrid(thetas, zetas)
@@ -750,6 +751,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
     
+    """
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETAS, ZETAS)
     moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
@@ -775,7 +777,11 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
 
     #print("DOT PRODUCT BHAT DOT DIAMAG", bHat_dot_diamag)
     #print("average", np.mean(bHat_dot_diamag))
+    """
     
+    moddrdtheta, moddrdzeta, dotproduct = 0, 0, 0 #hardcoded for HSX
+    modv = np.sqrt(v_theta**2 + v_zeta**2)
+
     if not os.path.exists("flows"):
         os.system("mkdir flows")
 
@@ -788,17 +794,19 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         # gets magnitude
         ll = label_for_plot
         label = ll[0]+ll[1]+ll[2]
-        bri = getBoozerRadialInterpolant(getPathToWout())
+        #bri = getBoozerRadialInterpolant(getPathToWout())
         points = unrollMeshgrid(PSIN, THETAS, ZETAS)
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
-        tickpositions = [0, np.pi]
-        ticklabels = ["0", "$\pi$"]
+        tickpositions = [0, np.pi*stelsymfactor]
+        ticklabels = ["0", "$\pi$"] # changed to pi/2 for HSX in x a few lines down
         ax.set_xlabel("$\zeta$", fontsize=28)
         ax.set_ylabel(r"$\theta$", fontsize=28)
-        ax.set_xticks(tickpositions, ticklabels, fontsize=18)
+        ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
         ax.set_yticks(tickpositions, ticklabels, fontsize=18)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
+        print(ZETAS[:, 0])
+        print(THETAS[0])
         strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
         #quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
         cbar = fig.colorbar(strm.lines)
@@ -809,7 +817,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         if not os.path.exists("./plots"):
             os.system("mkdir plots")
         fig.savefig(f"./plots/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_{omitPerp}_par_{omitPar}.jpeg", dpi=1200)
-        makeCSXSurface(folder, colorparam=modv, plotname=label)
+        #makeCSXSurface(folder, colorparam=modv, plotname=label)
 
         # makes plot of 1 >> | \iota + Gw/vB | criterion
 
@@ -819,7 +827,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         ticklabels = ["0", "$\pi$"]
         ax.set_xlabel(r"$\zeta$", fontsize=28)
         ax.set_ylabel(r"$\theta$", fontsize=28)
-        ax.set_xticks(tickpositions, ticklabels, fontsize=18)
+        ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
         ax.set_yticks(tickpositions, ticklabels, fontsize=18)
         criterion = valsafe(iotaval) + valsafe((G_array*w)/(vPar*modB))
         criterion = abs(valsafe(criterion))
@@ -1269,9 +1277,9 @@ if __name__ == "__main__":
 
     for radius in [file for file in os.listdir() if file.startswith("rN")]:
         print(f"Analyzing file {radius}...")
-        #getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
-        #getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
-        makeCSXSurface(radius, colorparam=B)
+        getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
+        getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+        #makeCSXSurface(radius, colorparam=B)
         #getTotalHeatFlux(radius)
         #getMetricTensor(radius)
         #getDeltaTvsEr(radius)
