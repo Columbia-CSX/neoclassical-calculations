@@ -18,7 +18,7 @@ parser.add_argument('--numRad', type=str, required=True, help='number of radii a
 parser.add_argument('--rN_min', type=str, required=True, help='innermost rN to perform calculation')
 parser.add_argument('--rN_max', type=str, required=True, help='outermost rN to perform calculation')
 parser.add_argument('--NErs', type=str, required=True, help='number of samples to scan between -ErRange and ErRange')
-parser.add_argument('--ErRange', type=str, required=True, nargs="+", help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V) if ErRange is a number\nif instead a tuple is provided, ex. "ErMin ErMax" then the scan will happen between these values')
+parser.add_argument('--ErRange', type=str, required=True, nargs="+", help='range of Er to scan-- ErMin = -ErRange, ErMax = ErRange (in V/m) if ErRange is a number\nif instead a tuple is provided, ex. "ErMin ErMax" then the scan will happen between these values')
 parser.add_argument('--SB', action=argparse.BooleanOptionalAction)
 parser.add_argument('--Nzeta', type=str, default="51", help="Number of points along zeta to use for the 1 field period mesh")
 parser.add_argument('--Ntheta', type=str, default="15", help="Number of points along theta to use")
@@ -61,9 +61,9 @@ with open(f"./sfincsScan_5", "r") as f:
     lines = f.readlines()
 new_lines = []
 for line in lines:
-    modified_line = line.replace(f"!ss NErs = 101", f"!ss NErs = {NErs}")
-    modified_line = modified_line.replace(f"!ss ErMax = 0.020", f"!ss ErMax = {ErMax/1000}")
-    modified_line = modified_line.replace(f"!ss ErMin = -0.020", f"!ss ErMin = {ErMin/1000}")
+    modified_line = line.replace(f"!ss NErs = 81", f"!ss NErs = {NErs}")
+    modified_line = modified_line.replace(f"!ss ErMax = 0.004", f"!ss ErMax = {ErMax/1000}")
+    modified_line = modified_line.replace(f"!ss ErMin = -0.004", f"!ss ErMin = {ErMin/1000}")
     new_lines.append(modified_line)
 with open(f"./sfincsScan_5", "w") as f:
     f.writelines(new_lines)
@@ -99,9 +99,9 @@ if not SB:
         lines = f.readlines()
     new_lines = []
     for line in lines:
-        modified_line = line.replace(f"!ss NErs = {NErs}", f"!ss NErs = 101")
-        modified_line = modified_line.replace(f"!ss ErMax = {ErMax/1000}", f"!ss ErMax = 0.020")
-        modified_line = modified_line.replace(f"!ss ErMin = {ErMin/1000}", f"!ss ErMin = -0.020")
+        modified_line = line.replace(f"!ss NErs = {NErs}", f"!ss NErs = 81")
+        modified_line = modified_line.replace(f"!ss ErMax = {ErMax/1000}", f"!ss ErMax = 0.004")
+        modified_line = modified_line.replace(f"!ss ErMin = {ErMin/1000}", f"!ss ErMin = -0.004")
         new_lines.append(modified_line)
     with open(f"./sfincsScan_5", "w") as f:
         f.writelines(new_lines)

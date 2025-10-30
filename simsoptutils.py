@@ -2,7 +2,8 @@ from simsopt.field.boozermagneticfield import BoozerRadialInterpolant
 from simsopt.mhd.vmec import Vmec
 import numpy as np
 
-# hardcoded for CSX -- need for accurate calculation of metric tensor elements
+# hardcoded for CSX -- need for accurate calculation of metric tensor
+#                      elements that involve derivatives wrt \psi 
 psi_LCFS = -0.004153280174337876 # T m^2
 
 def getBoozerRadialInterpolant(wout_file):

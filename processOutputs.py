@@ -114,6 +114,10 @@ phiBar = 1000*u.V #Volts
 mBar = 1.67262192595e-27*u.kg #kg
 vBar = np.sqrt(2*TBar/mBar).to(u.m/u.s) #m/s
 
+### Helicity for HSX
+MHSX = 4
+NHSX = 1
+
 ### Parameters supported ###
 
 # format:
@@ -123,6 +127,7 @@ vBar = np.sqrt(2*TBar/mBar).to(u.m/u.s) #m/s
 
 rN = Parameter("rN", r"$\sqrt{\psi_N}$")
 psiN = Parameter("psiN", r"$\psi_N$")
+psi = Parameter("psiHat", r"$\psi$", scaling=BBar*RBar*RBar)
 FSAbootstrapCurrentDensity = Parameter("FSABjHatOverB0", r"Bootstrap Current $\langle \mathbf{j}\cdot\mathbf{B} \rangle/B_{00}$ [A$\mathrm{m}^{-2}$]"                                       , scaling=e*vBar*nBar)
 Er = Parameter("Er", r"$E_r$ [V/m]", phiBar/RBar)
 flow_i = Parameter("flow", r"Ion parallel flow velocity $\int d^3v v_{||} f_i$ [m/s]", scaling=nBar*vBar, speciesIndex=1)
@@ -231,6 +236,45 @@ def plotProfile(parameter, radialCoordinate, plot=True, sort=True):
         ax.tick_params(axis='both', labelsize=20)
         fig.savefig(f"./plots/{parameter.name}_vs_{radialCoordinate.name}.jpeg", dpi=320)
         print(f"Plot {parameter.name}_vs_{radialCoordinate.name} saved.")
+
+    return radialCoords, vals
+
+def plotCurrentVsEr(plot=True):
+    """
+    to be run in a folder like raderscan/rN_x.xx,
+    for preliminary checks of what the Jr vs Er looks like
+    before running the ambipolar scan
+    """
+    dirfiles = os.listdir()
+    radialCoords = []
+    vals = []
+    for file in dirfiles:
+        if not file.startswith("Er"):
+            continue
+        try:
+            er = parseHDF5(f"{file}", Er).data
+            eflux = parseHDF5(file, eFlux_vm_psi).data
+            iflux = parseHDF5(file, iFlux_vm_psi).data
+            J_r = iflux - eflux
+            radialCoords.append(er)
+            vals.append(e*J_r)
+        except:
+            pass
+
+    radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
+    radialCoords = list(radialCoords)
+    vals = list(vals)
+
+    if plot:
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot()
+        ax.plot(valsafe(radialCoords), valsafe(vals), color='#012169', alpha=0.7)
+        ax.plot(valsafe(radialCoords), valsafe(vals), marker='o', linestyle='None', color='#012169')
+        ax.set_xlabel("Er", fontsize=24)
+        ax.set_ylabel("Jr", fontsize=24)
+        ax.tick_params(axis='both', labelsize=20)
+        fig.savefig(f"./plots/Jr_vs_Er.jpeg", dpi=320)
+        print(f"Plot Jr_vs_Er saved.")
 
     return radialCoords, vals
 
@@ -779,8 +823,8 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     #print("average", np.mean(bHat_dot_diamag))
     """
     
-    moddrdtheta, moddrdzeta, dotproduct = 0, 0, 0 #hardcoded for HSX
-    modv = np.sqrt(v_theta**2 + v_zeta**2)
+    moddrdtheta, moddrdzeta, dotproduct = 0.12, 1.2, 0.144*0.8 #hardcoded for HSX
+    modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
 
     if not os.path.exists("flows"):
         os.system("mkdir flows")
@@ -803,10 +847,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         ax.set_xlabel("$\zeta$", fontsize=28)
         ax.set_ylabel(r"$\theta$", fontsize=28)
         ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
-        ax.set_yticks(tickpositions, ticklabels, fontsize=18)
+        ax.set_yticks([0, np.pi], ticklabels, fontsize=18)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
-        print(ZETAS[:, 0])
-        print(THETAS[0])
+        #print(ZETAS[:, 0])
+        #print(THETAS[0])
         strm = ax.streamplot(ZETAS[:,0], THETAS[0], valsafe(v_zeta.T), valsafe(v_theta.T), color=valsafe(modv).T/1000, linewidth=lw, cmap=parulacmap)
         #quiv = ax.quiver(ZETAS, THETAS, valsafe(v_zeta.T/np.max(modv)), valsafe(v_theta.T/np.max(modv)), valsafe(modv).T/1000, cmap=parulacmap)
         cbar = fig.colorbar(strm.lines)
@@ -874,6 +918,8 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     mass_dens = m*parseHDF5(folder, n).data
     mass_dens = np.vstack((valsafe(mass_dens), valsafe(mass_dens)))*mass_dens.unit
 
+    # general case (used for CSX) where VMEC is compatible with simsopt
+    """
     if os.path.exists(filename):
         with open(filename, "rb") as f:
             _, __, ___, moddrdtheta, moddrdzeta, dotproduct = pickle.load(f)
@@ -884,8 +930,19 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
         dotproduct = get_drdzeta_dot_drdtheta(bri, points)
         dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
         moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
-
+    
     AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
+    """
+
+    ### Hardcoded for HSX ###
+    moddrdtheta = 0.12 # estimates based on minor
+    moddrdzeta = 1.20 # and major radius
+    dotproduct = moddrdtheta*moddrdzeta*np.cos(1.1)
+    term1 = (v_theta/MHSX)*moddrdtheta*moddrdtheta
+    term2 = (v_zeta/MHSX - v_theta/NHSX)*dotproduct
+    term3 = (v_zeta/NHSX)*moddrdzeta*moddrdzeta
+    AngularMomentumField = mass_dens*( (term1 + term2 - term3)*u.m*u.m )
+    #########################
     return AngularMomentumField
 
 def getRadialCurrent(folder):
@@ -902,17 +959,22 @@ def getRadialCurrent(folder):
     radial_current.to(u.A)
     return radial_current
 
-def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False):
+def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False, forVolumeIntegral=False):
     """
     Returns the flux surface average of a meshgrid ARRAY over the 
     flux surface specified by "folder". If justIntegral is True,
     then the integral over the flux surface (without the Jacobian) is
-    done. The result is a scalar quantity.
+    done. The result is a scalar quantity. NOTE currently only works for 
+    stellarators with two field periods.
     """
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
     zetas = np.concatenate((zetas, zetas+np.pi))
 
+    if ARRAY.shape != (len(zetas), len(thetas)):
+        ARRAY_unit = ARRAY.unit
+        ARRAY = valsafe(ARRAY)
+        ARRAY = np.vstack((ARRAY, ARRAY))*ARRAY_unit
     assert ARRAY.shape == (len(zetas), len(thetas))
     
     modB = valsafe(parseHDF5(folder, B).data)
@@ -932,8 +994,10 @@ def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False):
     integrand = sqrtg*ARRAY
     integral = dtheta*dzeta*np.sum(integrand)
 
-    if justIntegral:
+    if justIntegral or forVolumeIntegral:
         vprime = 1.0
+        if forVolumeIntegral:
+            vprime = vprime*u.T/u.m
 
     return integral/vprime
 
@@ -1042,6 +1106,9 @@ def getNTVTorque(folder, speciesIndex=0):
     fsaj = e*iFlux - e*eFlux
     iotaVal = parseHDF5(folder, iota).data
     NTV = iotaVal*fsaj
+    ### Hardcoded for HSX ###
+    NTV = -fsaj*(1/MHSX + iotaVal/NHSX)
+    #########################
     return NTV.to(u.kg/u.m/u.s/u.s)
 
 def getDeltaT(folder, speciesIndex=0):
@@ -1214,7 +1281,7 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
 
     return Ers, taus
 
-def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
+def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle", plot=False):
     """
     Plots DeltaT as a function of Er. May involve some debugging-- doesn't robustly
     handle ambipolar Er calculation.
@@ -1231,7 +1298,8 @@ def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
     ambipolar_index = np.squeeze(np.argwhere(np.sign(taus[:-1])-np.sign(taus[1:])))
     try:
         if len(ambipolar_index) != 3:
-            print(ambipolar_index)
+            for i in ambipolar_index:
+                print("Index:", i, ", Er:", Ers[i])
             inp = input("Type the ambipolar index")
             ambipolar_index = int(inp)
         else:
@@ -1254,8 +1322,65 @@ def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle"):
         DeltaL = abs(amds[i]-amds[ambipolar_index])
         DeltaTs.append(DeltaL/abs(tau_avg))
 
+    if plot:
+        fig = plt.figure(figsize=(10, 7))
+        ax = fig.add_subplot()
+        ax.set_xlabel(r"$E_r$ [V/m]", fontsize=28)
+        ax.set_ylabel(r"$t_{fd}$ [s]", fontsize=28)
+        ax.tick_params(axis="both", labelsize=18)
+        ax.set_yscale('log')
+        ax.plot(Ers, DeltaTs, color = columbia)
+        fig.tight_layout()
+        fig.savefig("../plots/DeltaTvsEr.png", dpi=600)
+
     return Ers, DeltaTs
-    
+
+def getConfinementTime():
+    """
+    to be run in the folder containing the rN_x.xx folders.
+    Estimates the energy confinement time by computing the 
+    total energy W of the confined particles by integrating
+    3/2 n_e T_e V^\prime over \psi. This assumes near-Maxwellian
+    f. tau_E is estimated W/P where P is the neoclassical and turbulent
+    power lost through the LCFS.
+    Note: it is possible to do a more precise calculation by using the 
+    full distribution function outputted from SFINCS.
+    """
+    psis = []
+    ws = []
+    for radius in [file for file in os.listdir() if file.startswith("rN")]:
+        # computes surface integral of \sqrt{g} 3/2 n_e T_e
+        print("RRadius", radius)
+        ne = parseHDF5(radius, n_e).data
+        ni = parseHDF5(radius, n_i).data
+        Te = parseHDF5(radius, T_e).data
+        Ti = parseHDF5(radius, T_i).data
+        integrand = ne*Te + ni*Ti
+        integral = fluxSurfaceAverageOfArray(radius, integrand, forVolumeIntegral=True)
+        ws.append(integral)
+        psi_hat = parseHDF5(radius, psi).data
+        psis.append(psi_hat)
+        psi_N = parseHDF5(radius, psiN).data
+        psiLCFS = psi_hat/psi_N
+
+    vol_integral = ws[0]*psis[0]
+    for i in range(1, len(ws)):
+        vol_integral += ws[i]*(psis[i]-psis[i-1])
+
+    if psis[-1] != psiLCFS:
+        vol_integral += ws[-1]*(psiLCFS-psis[-1])
+
+    print("Total energy", vol_integral.to(u.J))
+
+    Q_N, Q_T = np.load("qlcfs.npy")
+
+    P = (Q_N + Q_T)*u.W
+
+    tau_E = (vol_integral/P).to(u.s)
+
+    print("Confinement time", tau_E)
+
+    return tau_E
 if __name__ == "__main__":
 
     """
@@ -1275,10 +1400,14 @@ if __name__ == "__main__":
     except:
         print("Couldn't make QLFCS file")
 
+    plotCurrentVsEr()
+    getConfinementTime()
+
     for radius in [file for file in os.listdir() if file.startswith("rN")]:
         print(f"Analyzing file {radius}...")
         getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
         getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+        #getDeltaTvsEr(radius, plot=True)
         #makeCSXSurface(radius, colorparam=B)
         #getTotalHeatFlux(radius)
         #getMetricTensor(radius)
@@ -1295,7 +1424,7 @@ if __name__ == "__main__":
 """
 Some plots that I made that I didn't want to get rid of, used to show
 the asymmetric mode scaling etc. These are probably safe to delete at
-this point but I'm like a code hoarder I can never let go
+this point but I can never let go
 """
 """
 folder = "rN_0.95"
