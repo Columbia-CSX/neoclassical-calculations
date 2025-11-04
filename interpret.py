@@ -119,14 +119,17 @@ def get_Er(data, rootChoice, scaledownFactor=0.99):
     # subtracts away the value of Ir we want to find, and then looks
     # for roots. If Ir is 0 (or not provided), then these roots will
     # be the ambipolar ones.
+    print("Er data", data[0])
+    print("Ir data", data[1])
     data = [data[0], np.array(data[1])-Ir]
     ErMin = np.min(data[0])
     ErMax = np.max(data[0])
+    print("ErMin, ErMax", ErMin, ErMax)
     ErDiff = abs(data[0][1] - data[0][0]) # implicitly assumes len(Er) > 1, which is the
     print("ErMin, ErMax", ErMin, ErMax)   # only case this script is useful anyway
     # makes a linear interpolant. Ignore the use of "Jr", this value is Ir in Amperes
     Jr = interp1d(data[0], data[1], kind='linear')
-    Er_range = np.linspace(ErMin*scaledownFactor, ErMax*scaledownFactor, 1000)
+    Er_range = np.linspace(ErMin*(scaledownFactor)**(np.sign(-ErMin)), ErMax*scaledownFactor**np.sign(ErMax), 1000)
     Jrs = Jr(Er_range)
     # gets initial guesses for the zeroes based off where along Er that Ir changes sign
     zero_crossings = zeroCrossings(data[0], data[1])
@@ -170,9 +173,9 @@ def get_Er(data, rootChoice, scaledownFactor=0.99):
             return aErs[0]
         
         if len(aErs) == 2:
-            if rootChoice == 'low' or rootChoice == 'middle': #ion root
+            if rootChoice == 'low': #todo removed rootChoice == 'middle' #ion root
                 return aErs[0]
-            return aErs[1] #electron root, rootChoice == 'high'
+            return aErs[1] #electron root, rootChoice == 'high' # Nov 3, 2025 now also for rootChoice 'middle'
 
         if rootChoice == 'low':
             aEr = aErs[0]
