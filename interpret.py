@@ -139,6 +139,8 @@ def get_Er(data, rootChoice, scaledownFactor=0.99):
     aErs = []
     aEr = None
 
+    # Er_candidates = Er_candidates[:-1] # hardcoded fix for QP_B_test
+
     try:
         if len(Er_candidates) > 3:
             aEr = get_Er(data, rootChoice=rootChoice, scaledownFactor=scaledownFactor*0.9)
@@ -199,17 +201,22 @@ def make_profile(rNs, datas, rootChoice):
     "middle" is the best choice.
     """
     Ers = []
+    rNs_to_use = []
     for i, data in enumerate(tqdm(datas, desc="Generating Er profile...")):
-        Ers.append(get_Er(data, rootChoice))
+        try:
+            Ers.append(get_Er(data, rootChoice))
+            rNs_to_use.append(rNs[i])
+        except:
+            print(f"get_Er failure on {rNs[i]}")
         
     fig = plt.figure(figsize=(12, 9))
     ax = fig.add_subplot(111)
-    ax.plot(rNs, Ers, marker='o', linestyle='None', color='#012169')
+    ax.plot(rNs_to_use, Ers, marker='o', linestyle='None', color='#012169')
     ax.set_ylabel(r"ambipolar $E_r$ (V/m)", fontsize=24)
     ax.set_xlabel(r"$\sqrt{\psi_N}$", fontsize=24)
     ax.tick_params(axis='both', labelsize=20)
     fig.show()
-    return rNs, Ers
+    return rNs_to_use, Ers
     
 def make_3d_data(rNs, datas):
     """

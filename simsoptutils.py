@@ -7,6 +7,7 @@ import numpy as np
 psi_LCFS = -0.004153280174337876 # T m^2
 
 def getBoozerRadialInterpolant(wout_file):
+    print(wout_file)
     return BoozerRadialInterpolant(Vmec(wout_file), 3, mpol=15, ntor=14)
 
 def unrollMeshgrid(X, Y, Z):

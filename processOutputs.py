@@ -71,8 +71,10 @@ def getPathToWout():
             for line in lines:
                 line_list = line.split(" ")
                 if line_list[0] == "\tequilibriumFile":
-                    wout_file = line_list[2].replace('"', "").replace(".bc\n", ".nc")
+                    wout_file = line_list[2].replace('"', "").replace(".bc", ".nc").replace("\n", "")
                     os.chdir(main_dir)
+                    #print("wout_file:")
+                    #print(wout_file)
                     return wout_file
 
 """
@@ -682,10 +684,10 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
                 print("\t"+f"{filename}")
                 print("(Re)calculating flow data...")
 
-    stelsymfactor = 0.5 # 0.5 for HSX, 1.0 for CSX (2/numfieldperiods)
+    # stelsymfactor = 0.5 # 0.5 for HSX, 1.0 for CSX (2/numfieldperiods)
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
-    zetas = np.concatenate((zetas, zetas + np.pi*stelsymfactor))
+    # zetas = np.concatenate((zetas, zetas + np.pi*stelsymfactor)) # comment out for 1 FP plot
     psi_N = parseHDF5(folder, psiN).data
     
     THETAS, ZETAS = np.meshgrid(thetas, zetas)
@@ -702,7 +704,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
 
     vPar_unit = vPar.unit
     vPar = valsafe(vPar)
-    vPar = np.vstack((vPar, vPar))
+    # vPar = np.vstack((vPar, vPar)) # comment out for 1 FP plot
     
     Gval = parseHDF5(folder, G).data
     G_unit = Gval.unit
@@ -717,7 +719,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     modB = parseHDF5(folder, B).data
     modB_unit = modB.unit
     modB = valsafe(modB)
-    modB = np.vstack((modB, modB))
+    # modB = np.vstack((modB, modB)) # comment out for 1 FP plot
 
     vPar_theta = vPar*modB*iotaval / (G_array + iotaval*I_array)
     vPar_theta_unit = vPar_unit*modB_unit / (G_unit)
@@ -757,7 +759,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     Tval = parseHDF5(folder, T).data
 
     n_array = parseHDF5(folder, n).data
-    n_array = np.vstack((n_array, n_array))
+    # n_array = np.vstack((n_array, n_array)) # comment out for 1 FP plot
 
     #print("n_array", n_array)
     #print("Tval", Tval)
@@ -795,7 +797,6 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
     v_theta = vPar_theta*vPar_theta_unit*scalePar + vPerp_theta*scalePerp*w.unit
     v_zeta = vPar_zeta*vPar_zeta_unit*scalePar + vPerp_zeta*scalePerp*w.unit
     
-    """
     bri = getBoozerRadialInterpolant(getPathToWout())
     points = unrollMeshgrid(PSIN, THETAS, ZETAS)
     moddrdtheta, moddrdzeta = getGradientMagnitudes(bri, points)
@@ -821,9 +822,9 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
 
     #print("DOT PRODUCT BHAT DOT DIAMAG", bHat_dot_diamag)
     #print("average", np.mean(bHat_dot_diamag))
-    """
+
     
-    moddrdtheta, moddrdzeta, dotproduct = 0.12, 1.2, 0.144*0.8 #hardcoded for HSX
+    # moddrdtheta, moddrdzeta, dotproduct = 0.12, 1.2, 0.144*0.8 #hardcoded for HSX
     modv = np.sqrt( v_theta*v_theta*moddrdtheta*moddrdtheta + v_zeta*v_zeta*moddrdzeta*moddrdzeta + 2*v_theta*v_zeta*dotproduct )
 
     if not os.path.exists("flows"):
@@ -842,12 +843,12 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         points = unrollMeshgrid(PSIN, THETAS, ZETAS)
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
-        tickpositions = [0, np.pi*stelsymfactor]
-        ticklabels = ["0", "$\pi$"] # changed to pi/2 for HSX in x a few lines down
+        # tickpositions = [0, np.pi*stelsymfactor]
+        # ticklabels = ["0", "$\pi$"] # changed to pi/2 for HSX in x a few lines down
         ax.set_xlabel("$\zeta$", fontsize=28)
         ax.set_ylabel(r"$\theta$", fontsize=28)
-        ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
-        ax.set_yticks([0, np.pi], ticklabels, fontsize=18)
+        # ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
+        # ax.set_yticks([0, np.pi], ticklabels, fontsize=18)
         lw = 0.2+4*valsafe(modv).T/np.max(valsafe(modv))
         #print(ZETAS[:, 0])
         #print(THETAS[0])
@@ -867,12 +868,12 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
 
         fig = plt.figure(figsize=(12, 7))
         ax = fig.add_subplot()
-        tickpositions = [0, np.pi]
-        ticklabels = ["0", "$\pi$"]
+        # tickpositions = [0, np.pi]
+        # ticklabels = ["0", "$\pi$"]
         ax.set_xlabel(r"$\zeta$", fontsize=28)
         ax.set_ylabel(r"$\theta$", fontsize=28)
-        ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
-        ax.set_yticks(tickpositions, ticklabels, fontsize=18)
+        # ax.set_xticks(tickpositions, ["0", "$\pi/2$"], fontsize=18)
+        # ax.set_yticks(tickpositions, ticklabels, fontsize=18)
         criterion = valsafe(iotaval) + valsafe((G_array*w)/(vPar*modB))
         criterion = abs(valsafe(criterion))
         levels = np.logspace(np.log10(criterion.min()), np.log10(criterion.max()), num=50)
@@ -900,7 +901,7 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
 
     thetas = parseHDF5(folder, theta).data
     zetas = parseHDF5(folder, zeta).data
-    zetas = np.concatenate((zetas, zetas + np.pi))
+    # zetas = np.concatenate((zetas, zetas + np.pi))
     psi_N = parseHDF5(folder, psiN).data
 
     THETAS, ZETAS = np.meshgrid(thetas, zetas)
@@ -916,10 +917,10 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     filename = f"./flows/{folder.replace('.', '_')}_fullV_{speciesIndex}_perp_False_par_False.pkl"
 
     mass_dens = m*parseHDF5(folder, n).data
-    mass_dens = np.vstack((valsafe(mass_dens), valsafe(mass_dens)))*mass_dens.unit
+    #mass_dens = np.vstack((valsafe(mass_dens), valsafe(mass_dens)))*mass_dens.unit
 
     # general case (used for CSX) where VMEC is compatible with simsopt
-    """
+
     if os.path.exists(filename):
         with open(filename, "rb") as f:
             _, __, ___, moddrdtheta, moddrdzeta, dotproduct = pickle.load(f)
@@ -931,9 +932,11 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
         dotproduct = rollMeshgrid(len(zetas), len(thetas), dotproduct)
         moddrdzeta = rollMeshgrid(len(zetas), len(thetas), moddrdzeta)
     
+    #print(dotproduct.shape)
+    #print(v_theta.shape)
     AngularMomentumField = mass_dens*(v_theta*dotproduct*u.m*u.m + v_zeta*moddrdzeta*moddrdzeta*u.m*u.m)
+    
     """
-
     ### Hardcoded for HSX ###
     moddrdtheta = 0.12 # estimates based on minor
     moddrdzeta = 1.20 # and major radius
@@ -943,6 +946,8 @@ def getAngularMomentumDensity(folder, speciesIndex=0):
     term3 = (v_zeta/NHSX)*moddrdzeta*moddrdzeta
     AngularMomentumField = mass_dens*( (term1 + term2 - term3)*u.m*u.m )
     #########################
+    """
+
     return AngularMomentumField
 
 def getRadialCurrent(folder):
@@ -995,7 +1000,7 @@ def fluxSurfaceAverageOfArray(folder, ARRAY, justIntegral=False, forVolumeIntegr
     integral = dtheta*dzeta*np.sum(integrand)
 
     if justIntegral or forVolumeIntegral:
-        vprime = 1.0
+        vprime = 0.5 # Hardcoded for field period 2 stellarator
         if forVolumeIntegral:
             vprime = vprime*u.T/u.m
 
@@ -1106,9 +1111,12 @@ def getNTVTorque(folder, speciesIndex=0):
     fsaj = e*iFlux - e*eFlux
     iotaVal = parseHDF5(folder, iota).data
     NTV = iotaVal*fsaj
+    """
     ### Hardcoded for HSX ###
     NTV = -fsaj*(1/MHSX + iotaVal/NHSX)
     #########################
+    """
+
     return NTV.to(u.kg/u.m/u.s/u.s)
 
 def getDeltaT(folder, speciesIndex=0):
@@ -1255,6 +1263,8 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
         except:
             pass
         finally:
+            if returnAMD:
+                valsafe(getFSAAngularMomentumDensity(file, speciesIndex=speciesIndex)) # debug
             if erPass and tauPass and amdPass:
                 pass
             else:
@@ -1281,7 +1291,7 @@ def getNTVvsEr(folder, returnAMD=False, speciesIndex=0):
 
     return Ers, taus
 
-def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle", plot=False):
+def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="low", plot=False):
     """
     Plots DeltaT as a function of Er. May involve some debugging-- doesn't robustly
     handle ambipolar Er calculation.
@@ -1291,7 +1301,8 @@ def getDeltaTvsEr(folder, speciesIndex=1, rootChoice="middle", plot=False):
 
     Returns a tuple (Er, DeltaTs) of DeltaT values corresponding to the Er values.
     """
-
+    
+    print("running getDeltaTvsEr")
     assert rootChoice in ["low", "middle", "high"], "root choice should be low, middle or high"
     Ers, taus, amds = getNTVvsEr(folder, speciesIndex=speciesIndex, returnAMD=True)
     
@@ -1400,13 +1411,16 @@ if __name__ == "__main__":
     except:
         print("Couldn't make QLFCS file")
 
-    plotCurrentVsEr()
-    getConfinementTime()
+    # plotCurrentVsEr()
+    # getConfinementTime()
 
     for radius in [file for file in os.listdir() if file.startswith("rN")]:
         print(f"Analyzing file {radius}...")
-        getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
-        getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+        try:
+            getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
+            getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+        except:
+            print(f"Analysis failed on {radius}")
         #getDeltaTvsEr(radius, plot=True)
         #makeCSXSurface(radius, colorparam=B)
         #getTotalHeatFlux(radius)

@@ -11,13 +11,15 @@ values of the symmetry breaking factor esb.
 
 colors = ["crimson", "darkorange", "goldenrod", "green", "#259B9A", columbia]
 
+colors = ["crimson", "goldenrod", columbia]
+
 # all plots will be saved in the "./plots/" directory
 if not os.path.exists("./plots"):
     os.system("mkdir plots")
 
 def plotVvsesb(speciesIndex=0, omitPar=False, omitPerp=False, makesubplots=True):
     """
-    Plots flow velocity as of the particle species specified by speciesIndex (0
+    Plots flow velocity of the particle species specified by speciesIndex (0
     electron, 1 ion), if omitPar or omitPerp are true then the parallel or
     perpendicular components respectively of the flow will be ignored in the
     flux surface averaged flow velocity calculation. See getVprofile in processOutputs.

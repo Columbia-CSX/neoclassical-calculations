@@ -18,8 +18,7 @@ A typical workflow might be to use runRadErScan.py to run sfincs over a range of
 
 If you'd also like to scan over different values of the symmetry breaking factor $\epsilon_{sb}$, this can be done similarly by using the scripts runSBRadErScan.py, runSBAmbipolar.py, and processSBOutputs.py. Note that you should edit \_\_main\_\_ in processOutputs.py and/or processSBOutputs.py to ensure it's plotting/calculating whatever it is you're actually interested in.
 
-Feel free to email me if you have any questions : )
+Feel free to email me if you have any questions.
 
-mc5893@columbia.edu    <-- preferred until September 2025\
 macampagna@wm.edu      <-- preferred until June 2026\
 michampagn13@gmail.com <-- just in case
