@@ -402,7 +402,7 @@ def make_qlcfs_file(lcfs=None):
     print("Making qlcfs.npy...")
     if lcfs is None:
         lcfs = getLCFS()
-        print(lcfs)
+    print(lcfs)
     print(os.getcwd())
     Q_N = getNeoclassicalHeatFlux(lcfs)
     Q_T = getGyroBohmHeatFluxEstimate(lcfs)
@@ -678,7 +678,7 @@ def getFullV(folder, speciesIndex=0, omitPar=False, omitPerp=False, plot=False, 
         with open(filename, "rb") as f:
             try:
                 v_theta, v_zeta, modv, _, __, ___ = pickle.load(f)
-                return v_theta, v_zeta, modv
+                return v_theta, v_zeta, modv, _ # the _ is mod drdtheta which I need for just a second
             except:
                 print("Unable to recover flow data from the following file:")
                 print("\t"+f"{filename}")
@@ -1019,10 +1019,13 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
     for file in dirfiles:
         if not file.startswith("rN"):
             continue
-        radialCoords.append(parseHDF5(file, rN).data)
-        v_theta, v_zeta, modv = getFullV(file, speciesIndex=speciesIndex, omitPar=omitPar, omitPerp=omitPerp, plot=plot)
-        v = fluxSurfaceAverageOfArray(file, modv)
-        vals.append(v)
+        try:
+            radialCoords.append(parseHDF5(file, rN).data)
+            v_theta, v_zeta, modv, moddrdtheta = getFullV(file, speciesIndex=speciesIndex, omitPar=omitPar, omitPerp=omitPerp, plot=plot)
+            v = fluxSurfaceAverageOfArray(file, v_theta*moddrdtheta) # changed from modv to v_theta for QP paper
+            vals.append(v)
+        except:
+            pass
 
     radialCoords, vals = zip(*sorted(zip(radialCoords, vals), key=lambda pair: pair[0]))
     radialCoords = list(radialCoords)
@@ -1046,7 +1049,10 @@ def getVprofile(radialCoordinate=rN, speciesIndex=0, omitPar=False, omitPerp=Fal
         ax.set_xlabel(radialCoordinate.label, fontsize=24)
         ax.set_ylabel(ylabel, fontsize=24)
         ax.tick_params(axis='both', labelsize=20)
-        fig.savefig(f"./plots/{filename}_vs_rN.jpeg", dpi=320)
+        fig.savefig(f"./plots/{filename}_vs_rN_poloidal_flow_profile.jpeg", dpi=320)
+
+    print("rN, flux surface averaged flow")
+    print(radialCoords, vals)
 
     return radialCoords, vals
 
@@ -1407,19 +1413,21 @@ if __name__ == "__main__":
     # makeStreamPlot("rN_0.95", vPar_e)
     # makeStreamPlot("rN_0.95", vPar_i)
     try:
-        make_qlcfs_file()
+        make_qlcfs_file(lcfs="rN_0.75")
     except:
         print("Couldn't make QLFCS file")
 
     # plotCurrentVsEr()
     # getConfinementTime()
+    getVprofile(speciesIndex=1)
 
     for radius in [file for file in os.listdir() if file.startswith("rN")]:
         print(f"Analyzing file {radius}...")
         try:
-            getFullV(radius, speciesIndex=0, forceRedo=True, plot=True)
-            getFullV(radius, speciesIndex=1, forceRedo=True, plot=True)
+            #getVprofile(speciesIndex=1)
+            pass
         except:
+            #getVprofile(speciesIndex=1)
             print(f"Analysis failed on {radius}")
         #getDeltaTvsEr(radius, plot=True)
         #makeCSXSurface(radius, colorparam=B)

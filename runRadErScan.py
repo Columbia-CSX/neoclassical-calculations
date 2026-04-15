@@ -36,8 +36,8 @@ Nzeta = parser.parse_args().Nzeta
 Ntheta = parser.parse_args().Ntheta
 Nxi = parser.parse_args().Nxi
 
-if int(NErs) % 2 == 0:
-    NErs = str(int(NErs)+1)
+#if int(NErs) % 2 == 0:
+#    NErs = str(int(NErs)+1)
 
 try:
     ErRange = float(parser.parse_args().ErRange)
@@ -61,7 +61,7 @@ with open(f"./sfincsScan_5", "r") as f:
     lines = f.readlines()
 new_lines = []
 for line in lines:
-    modified_line = line.replace(f"!ss NErs = 81", f"!ss NErs = {NErs}")
+    modified_line = line.replace(f"!ss NErs = 61", f"!ss NErs = {NErs}")
     modified_line = modified_line.replace(f"!ss ErMax = 0.004", f"!ss ErMax = {ErMax/1000}")
     modified_line = modified_line.replace(f"!ss ErMin = -0.004", f"!ss ErMin = {ErMin/1000}")
     new_lines.append(modified_line)
@@ -99,7 +99,7 @@ if not SB:
         lines = f.readlines()
     new_lines = []
     for line in lines:
-        modified_line = line.replace(f"!ss NErs = {NErs}", f"!ss NErs = 81")
+        modified_line = line.replace(f"!ss NErs = {NErs}", f"!ss NErs = 61")
         modified_line = modified_line.replace(f"!ss ErMax = {ErMax/1000}", f"!ss ErMax = 0.004")
         modified_line = modified_line.replace(f"!ss ErMin = {ErMin/1000}", f"!ss ErMin = -0.004")
         new_lines.append(modified_line)
