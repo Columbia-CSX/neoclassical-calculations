@@ -14,11 +14,8 @@ Some of the python scripts accept (or require) arguments when called from the te
 
 In order to run, sfincs needs information about the density and temperature gradients in the plasma volume. Profiles can be specified using profiles.py. A VMEC wout file and a .bc file are additionally necessary to specify the magnetic geometry. [I will update the repo to add all of the ones I used soon] Given just the wout, a .bc file can be created using the wout2bc.py script [currently adapting this script to be more user friendly].
 
-A typical workflow might be to use runRadErScan.py to run sfincs over a range of flux surfaces, varying the radial electric field Er on each. After this is done, runAmbipolar.py may be used to parse the outputs from runRadErScan.py to run sfincs at the ambipolar Er value for each flux surface. Quantities of interest can be calculated by running processOutputs.py in either the ./ambipolar directory.
+A typical workflow might be to use runRadErScan.py to run sfincs over a range of flux surfaces, varying the radial electric field Er on each. After this is done, runAmbipolar.py may be used to parse the outputs from runRadErScan.py to run sfincs at the ambipolar Er value for each flux surface. Quantities of interest can be calculated by running processOutputs.py in the ./ambipolar directory.
 
 If you'd also like to scan over different values of the symmetry breaking factor $\epsilon_{sb}$, this can be done similarly by using the scripts runSBRadErScan.py, runSBAmbipolar.py, and processSBOutputs.py. Note that you should edit \_\_main\_\_ in processOutputs.py and/or processSBOutputs.py to ensure it's plotting/calculating whatever it is you're actually interested in.
 
-Feel free to email me if you have any questions.
-
-macampagna@wm.edu      <-- preferred until June 2026\
-michampagn13@gmail.com <-- just in case
+Feel free to email me at michael.campagna@columbia.edu if you have any questions.
